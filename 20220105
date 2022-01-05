@@ -1,52 +1,44 @@
 2022/1/5)
 
-大枠
+作業フロー
 1.apacheの導入(ソースコードからbuild)
 2.httpdの設定
 3.index.html(hello world)を表示させる
-
-注)ビルドしていくのはlampのみ。
 
 実作業内容
 1.GCCコンパイラのインストール
 [Installing GCC - GNU Project](https://gcc.gnu.org/install/)
  1)GCCソースのダウンロード
- 参考：[【CentOS7】gccをソースからインストール \| server-memo.net](https://www.server-memo.net/memo/gcc-install.html#gcc-2)
- →gccをソースからビルドする手順の参考として参照
- [本の虫: GCCのSVN trunkをビルドする方法](https://cpplover.blogspot.com/2017/01/gccsvn-trunk.html)
- →「3-stage bootstrap build」がわからなかったため参照
- [What gcc versions are available in Red Hat Enterprise Linux? - Red Hat Customer Portal](https://access.redhat.com/solutions/19458)
- →redhat7に対応するgccバージョンを確認
- するために参照
+ 参考：[What gcc versions are available in Red Hat Enterprise Linux? - Red Hat Customer Portal](https://access.redhat.com/solutions/19458)
+　　　　→redhat7に対応するgccバージョンを確認するために参照
+     
  2)GCCインストール(configure+make+make install)
-
  結果)configureコマンド実行時にエラー
- (configure: error: no acceptable C compiler found in $PATH)
- 検討したこと)コンパイラの導入
- 対応方法)yum installにて対応
+  該当エラー：configure: error: no acceptable C compiler found in $PATH
+ 検討事項)コンパイラの導入
+ 対応方法)GCCのインストールはソースコードからのビルドではなくyum installにて対応
 
 2.apacheのインストール
  1)apacheソースコードのダウンロード
 [コンパイルとインストール - Apache HTTP サーバ バージョン 2.2](https://httpd.apache.org/docs/2.2/ja/install.html)
-→公式ビルド手順
+　→公式ビルド手順
 [Download - The Apache HTTP Server Project](https://httpd.apache.org/download.cgi)
-→ダウンロード先
+　→ダウンロードしたファイル
 
  2)configureコマンド実行(1回目)
  結果)失敗
  原因)APRとAPR-utilを導入する必要があるため。
  対応)APRとAPR-utilを導入
- 参考サイト)[Apache httpd 2.4 をソースからインストールする手順 (CentOS/RedHat) \|](https://weblabo.oscasierra.net/install-apache24-1/)
  
  3)APR導入
   (1)ダウンロード
   (2)configureコマンド実行(1回目)
   結果)失敗
   原因)「libtoolT」が削除できなかったため。
-  rm: cannot remove `libtoolT': No such file or directory
+  　該当エラー：rm: cannot remove `libtoolT': No such file or directory
   対応)configureの中をviにて修正
-  　旧)$RM -f "$cfgfile"
-    新)$RM "$cfgfile"
+  　新)$RM -f "$cfgfile"
+    旧)$RM "$cfgfile"
   参考サイト)[tomcat - Error while compiling apache APR make file not found - Stack Overflow](https://stackoverflow.com/questions/18091991/error-while-compiling-apache-apr-make-file-not-found)
   (3)configureコマンド実行(2回目)
   結果)失敗
@@ -56,9 +48,8 @@
   対応)rootにスイッチ
   (4)configureコマンド実行(3回目)
   結果)成功
-  備考)rootにスイッチして成功して理由については別途理解する。
-  
-  学んだこと)makeコマンドを実行しなおす際はmake clearを実行
+  備考)rootにスイッチして成功して理由については別途確認。
+  補足)makeコマンドを実行しなおす際はmake cleanを実行
 
 4)APR-util導入(成功)
 
@@ -86,3 +77,29 @@
 
 11)ブラウザアクセス(3回目)
   結果)成功
+
+
+指摘・確認事項
+
+指摘事項：
+　実行したコマンドは残しておく。(ディレクトリ、ユーザがわかる状態で)
+　ソースをダウンロードする際、usr/localかopt
+　→一般的なのはusr/localなので、usr/localに置く。
+　コンパイル実行時、return codeを確認する。
+　修正したファイルはフルパスで記載しておき、更新前後で明らかにしておく。
+
+確認事項：
+　yum,rpmの動作について正確に理解する。
+　Linuxファイルシステムについて、確認する。
+  APRとAPR-utilについて、それぞれの役割を知っておく。
+  上記3)(4)について、rootで成功した理由を確認
+  make clean とmake distcleanの違いを確認
+  configure実行前後の変化(diff)を確認
+  make make installの内容を確認(logを見る)
+  オブジェクトファイルとは
+
+
+
+
+
+
