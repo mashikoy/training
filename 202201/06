@@ -380,3 +380,85 @@ success
 (新)<html><body><h1>Hello World!</h1></body></html>
 (旧)<html><body><h1>It works!</h1></body></html>
 
+
+◆確認事項
+1.yum groupinstall "Development tools"
+linuxインストール時に開発者ツールを選択して導入されるものと同じ。
+
+↓インストールされるもの。
+[admin@localhost ~]$ yum groupinfo "Development Tools"
+
+グループ: 開発ツール
+ グループ ID: development
+ 説明: 基本的な開発環境
+ 強制的なパッケージ:
+    autoconf
+    automake
+    binutils
+    bison
+    flex
+    gcc
+    gcc-c++
+    gettext
+    libtool
+    make
+    patch
+    pkgconfig
+    redhat-rpm-config
+    rpm-build
+    rpm-sign
+ 標準パッケージ:
+    byacc
+    cscope
+    ctags
+    diffstat
+    doxygen
+    elfutils
+    gcc-gfortran
+    git
+    indent
+    intltool
+    patchutils
+    rcs
+    subversion
+    swig
+    systemtap
+ オプション パッケージ:
+   ElectricFence
+   ant
+   babel
+   bzr
+   chrpath
+   cmake
+   compat-gcc-44
+   compat-gcc-44-c++
+   cvs
+   dejagnu
+   expect
+   gcc-gnat
+   gcc-objc
+   gcc-objc++
+   imake
+   javapackages-tools
+   ksc
+   mercurial
+   mod_dav_svn
+   nasm
+   perltidy
+   rpmdevtools
+   rpmlint
+   systemtap-sdt-devel
+   systemtap-server
+
+2.so(shered object)とは、、、
+単体では実行できないオブジェクトファイル。
+他のプログラムに連結してその機能を呼び出すために用意される。
+
+.soはダイナミックリンクでプログラム実行時にリンクされる。
+.aはスタティックリンクでビルド時にリンクされる。
+
+3.apacheコンパイル時の共有モジュール指定オプションについて
+
+all：大体全部
+reallyall：本当に全部
+
