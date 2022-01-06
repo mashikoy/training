@@ -1,0 +1,382 @@
+[2022/1/6]研修タスクまとめ
+
+大枠
+1.apacheの導入(ソースコードからbuild)
+2.httpdの設定
+3.index.html(hello world)を表示させる
+
+実作業内容
+
+1.apache導入時の前提条件確認
+[admin@localhost ~]$ gcc --version
+gcc (GCC) 4.8.5 20150623 (Red Hat 4.8.5-44)
+Copyright (C) 2015 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+→コンパイラが入っていることを確認
+
+[admin@localhost ~]$ date
+2022年  1月  6日 木曜日 11:17:30 JST
+
+→日時が正確なことを確認。
+ HOSTの日時が自動同期設定されていることを確認したため問題なし。
+
+[admin@localhost ~]$ perl -v
+This is perl 5, version 16, subversion 3 (v5.16.3) built for x86_64-linux-thread-multi
+(with 41 registered patches, see perl -V for more detail)
+
+→perlのバージョンが5.003以上であることを確認。
+
+
+2.apache導入時の前提準拠(1)・・・pcreの導入(rpmで導入)
+[admin@localhost ~]$ groups
+admin
+[admin@localhost ~]$ gpasswd -a admin wheel
+gpasswd: 権限がありません。
+[admin@localhost ~]$ su -
+パスワード:
+最終ログイン: 2022/01/06 (木) 11:57:33 JST日時 pts/0
+[root@localhost ~]# gpasswd -a admin wheel
+ユーザ admin をグループ wheel に追加
+[root@localhost ~]# exit
+[admin@localhost ~]$ exit
+
+→sudoできるようrootユーザでadminユーザをwheelグループに追加
+
+[admin@localhost ~]$ rpm -ivh http://mirror.centos.org/centos/7/os/x86_64/Packages/pcre-devel-8.32-17.el7.x86_64.rpmp
+http://mirror.centos.org/centos/7/os/x86_64/Packages/pcre-devel-8.32-17.el7.x86_64.rpm を取得中
+警告: /var/tmp/rpm-tmp.y8GwJf: ヘッダー V3 RSA/SHA256 Signature、鍵 ID f4a80eb5: NOKEY
+エラー: トランザクション ロックを（/var/lib/rpm/.rpm.lock 上に）作成できません。(許可がありません)
+
+[admin@localhost rpm]$ ls -al /var/lib/rpm/.rpm.lock
+-rw-r--r--. 1 root root 0  1月  5 18:53 .rpm.lock
+
+→一般ユーザ権限で実行するとroot所有のlockファイルにロックの作成ができずエラー
+
+[admin@localhost ~]$ sudo rpm -ivh http://mirror.centos.org/centos/7/os/x86_64/Packages/pcre-devel-8.32-17.el7.x86_64.rpm
+[sudo] admin のパスワード:
+http://mirror.centos.org/centos/7/os/x86_64/Packages/pcre-devel-8.32-17.el7.x86_64.rpm を取得中
+警告: /var/tmp/rpm-tmp.dgOgj7: ヘッダー V3 RSA/SHA256 Signature、鍵 ID f4a80eb5: NOKEY
+準備しています...                                           (省略)(100%)# 
+
+
+[admin@localhost html]$ rpm -qsa pcre-devel
+通常          /usr/bin/pcre-config
+通常          /usr/include/pcre.h
+通常          /usr/include/pcre_scanner.h
+通常          /usr/include/pcre_stringpiece.h
+通常          /usr/share/man/man3/pcrestack.3.gz
+通常          /usr/share/man/man3/pcresyntax.3.gz
+通常          /usr/share/man/man3/pcreunicode.3.gz
+～
+
+→rpmコマンドにてインストールされたファイルを確認
+[admin@localhost html]$ sudo find / -name '*pcre*'
+/var/lib/yum/yumdb/p/89263910acbe8c22f1451bf6caf8b29d869fa4f3-pcre2-10.23-2.el7-x86_64
+/var/lib/yum/yumdb/p/91213c373c672d05dc3bdeb0901c1065a100c05b-pcre2-utf16-10.23-2.el7-x86_64
+/var/lib/yum/yumdb/p/7004fdf215e845f51bac82c0052e0c4e9a90d27a-pcre-8.32-17.el7-x86_64
+/usr/bin/pcre-config
+/usr/lib64/libpcre.so.1
+/usr/lib64/libpcre.so.1.2.0
+/usr/lib64/libpcre16.so.0
+/usr/lib64/libpcre16.so.0.2.0
+/usr/lib64/libpcre32.so.0
+/usr/lib64/libpcre32.so.0.0.0
+～
+
+
+2.apache導入時の前提準拠(2)・・・APRの導入(ソースをダウンロードしてビルド)
+
+curlコマンド
+tar
+
+[admin@localhost apr-1.7.0]$ sudo ./configure
+
+～～
+config.status: creating include/arch/unix/apr_private.h
+config.status: executing libtool commands
+rm: cannot remove 'libtoolT': No such file or directory
+config.status: executing default commands
+configure: WARNING: unrecognized options: --enable-so
+
+[admin@localhost apr-1.7.0]$ ls -ltr Make*
+-rw-r--r--. 1 1001 1001 4887  3月 13  2019 Makefile.in
+-rw-r--r--. 1 1001 1001 4615  3月 26  2019 Makefile.win
+-rw-r--r--. 1 root root 4992  1月  6 13:53 Makefile
+
+→Makefileができていることを確認
+
+[admin@localhost apr-1.7.0]$ sudo make distclean
+
+→エラーが生じたため、Makefileの削除
+
+[admin@localhost apr-1.7.0]$ ls -ltr Make*
+-rw-r--r--. 1 1001 1001 4887  3月 13  2019 Makefile.in
+-rw-r--r--. 1 1001 1001 4615  3月 26  2019 Makefile.win
+
+→Malefileが消えていることを確認
+
+[admin@localhost apr-1.7.0]$ sudo vi configure
+
+→修正内容
+  　新)$RM -f "$cfgfile"
+    旧)$RM "$cfgfile"
+  参考サイト)[tomcat - Error while compiling apache APR make file not found - Stack Overflow](https://stackoverflow.com/questions/18091991/error-while-compiling-apache-apr-make-file-not-found)
+  
+→原因：既存バグ？
+
+サイト
+[モジュール一覧 - Apache HTTP サーバ バージョン 2.4](https://httpd.apache.org/docs/2.4/ja/mod/)
+
+[admin@localhost apr-1.7.0]$ sudo ./configure --enable-so
+
+→再度実行
+
+[admin@localhost apr-1.7.0]$ echo $?
+0
+
+→正常終了を確認
+
+[admin@localhost apr-1.7.0]$ ls -ltr Makefile*
+-rw-r--r--. 1 1001 1001 4887  3月 13  2019 Makefile.in
+-rw-r--r--. 1 1001 1001 4615  3月 26  2019 Makefile.win
+-rw-r--r--. 1 root root 4992  1月  6 14:06 Makefile
+
+→Makefileが作成されていることを確認
+
+[admin@localhost apr-1.7.0]$ cat Makefile >> ~/makefile_of_apr.txt
+
+→後から振り返る用
+
+[admin@localhost apr-1.7.0]$ sudo make
+
+[admin@localhost apr-1.7.0]$ echo $?
+0
+
+→正常にコンパイルされたことを確認
+
+[admin@localhost apr-1.7.0]$ find ./ -name '*.o*'
+
+→オブジェクトファイルが作成されていることを確認
+
+[admin@localhost apr-1.7.0]$ sudo make install
+
+[admin@localhost apr-1.7.0]$ echo $?
+0
+
+→正常にインストールできたことを確認
+
+[admin@localhost apr]$ cd /usr/local/
+[admin@localhost local]$ ls
+apr  bin  etc  games  include  lib  lib64  libexec  sbin  share  src
+[admin@localhost local]$ cd apr/
+[admin@localhost apr]$ ls
+bin  build-1  include  lib
+
+
+→コンパイルされたファイルが移動されていることを確認
+
+
+3.apache導入時の前提準拠(3)・・・APR-utilの導入(ソースをダウンロードしてビルド)
+
+[admin@localhost src]$ sudo curl -LO https://dlcdn.apache.org//apr/apr-util-1.6.1.tar.gz
+
+[admin@localhost src]$ sudo tar xzfv apr-util-1.6.1.tar.gz
+
+[admin@localhost apr-util-1.6.1]$ sudo ./configure --with-apr=/usr/local/apr
+
+[admin@localhost apr-util-1.6.1]$ echo $?
+0
+
+[admin@localhost apr-util-1.6.1]$ ls -l Makefile
+-rw-r--r--. 1 root root 4191  1月  6 14:40 Makefile
+
+[admin@localhost apr-util-1.6.1]$ cat Makefile >> ~/makefile_of_apr_util.txt
+
+→後から振り返る用
+
+[admin@localhost apr-util-1.6.1]$ sudo ./configure --with-apr=/usr/local/apr
+
+[admin@localhost apr-util-1.6.1]$ echo $?
+0
+
+[admin@localhost apr-util-1.6.1]$ ls -l Makefile
+
+[admin@localhost apr-util-1.6.1]$ sudo make
+
+/bin/sh /usr/local/apr/build-1/libtool --silent --mode=compile gcc -g -O2 -pthread   -DHAVE_CONFIG_H  -DLINUX -D_REENTRANT -D_GNU_SOURCE   -I/usr/local/src/apr-util-1.6.1/include -I/usr/local/src/apr-util-1.6.1/include/private  -I/usr/local/apr/include/apr-1    -o xlate/xlate.lo -c xlate/xlate.c && touch xlate/xlate.lo
+/bin/sh /usr/local/apr/build-1/libtool --silent --mode=compile gcc -g -O2 -pthread   -DHAVE_CONFIG_H  -DLINUX -D_REENTRANT -D_GNU_SOURCE   -I/usr/local/src/apr-util-1.6.1/include -I/usr/local/src/apr-util-1.6.1/include/private  -I/usr/local/apr/include/apr-1    -o xml/apr_xml.lo -c xml/apr_xml.c && touch xml/apr_xml.lo
+xml/apr_xml.c:35:19: 致命的エラー: expat.h: そのようなファイルやディレクトリはありません
+ #include <expat.h>
+                   ^
+コンパイルを停止しました。
+make[1]: *** [xml/apr_xml.lo] エラー 1
+make[1]: ディレクトリ `/usr/local/src/apr-util-1.6.1' から出ます
+make: *** [all-recursive] エラー 1
+
+→.hがない。expat-develがないためと思われるのでexpat-develをインストール
+
+[admin@localhost apr-util-1.6.1]$ sudo make distclean
+
+→コンパイルエラーだが一応distclean
+
+[admin@localhost apr-util-1.6.1]$ echo $?
+0
+
+→正常終了
+
+[admin@localhost apr-util-1.6.1]$ sudo yum install expat-devel
+
+[admin@localhost apr-util-1.6.1]$ sudo ./configure --with-apr=/usr/local/apr
+
+[admin@localhost apr-util-1.6.1]$ echo $?
+0
+
+[admin@localhost apr-util-1.6.1]$ ls -l Makefile
+-rw-r--r--. 1 root root 4191  1月  6 14:40 Makefile
+
+[admin@localhost apr-util-1.6.1]$ less Makefile
+
+[admin@localhost apr-util-1.6.1]$ cat Makefile >> ~/makefile_of_apr_util.txt
+→後で振り返る用
+
+[admin@localhost apr-util-1.6.1]$ sudo make
+
+[admin@localhost apr-util-1.6.1]$ echo $?
+0
+
+→コンパイルの正常終了を確認
+
+[admin@localhost apr-util-1.6.1]$ cat Makefile>> ~/makefile_of_apr_util_2.txt
+→後で振り返る用
+
+[admin@localhost apr-util-1.6.1]$ sudo make install
+
+[admin@localhost apr-util-1.6.1]$ echo $?
+0
+
+[admin@localhost usr]$ cd /usr/local/
+
+[admin@localhost local]$ cd apr/
+
+[admin@localhost apr]$ ls -ltr
+合計 0
+drwxr-xr-x. 3 root root  19  1月  6 14:22 include
+drwxr-xr-x. 2 root root 108  1月  6 14:22 build-1
+drwxr-xr-x. 3 root root 281  1月  6 14:53 lib
+drwxr-xr-x. 2 root root  46  1月  6 14:53 bin
+
+libディレクトリ、binディレクトリにインストールされていることを確認。
+
+
+4.apache導入
+[admin@localhost httpd-2.4.52]$ sudo curl -LO https://dlcdn.apache.org//httpd/httpd-2.4.52.tar.gz
+
+[admin@localhost httpd-2.4.52]$ sudo tar xzfv httpd-2.4.52.tar.gz
+
+[admin@localhost apr]$ openssl version
+OpenSSL 1.0.2k-fips  26 Jan 2017
+[admin@localhost apr]$ sudo yum update openssl
+
+→sslを有効化するため、念のためupdate
+
+[admin@localhost httpd-2.4.52]$ sudo ./configure --with-apr=/usr/local/apr --with-apr-util=/usr/local/apr --enable-so --enable-module=rewrite --enable-ssl
+
+→wordpress導入条件を満たすようmod_rewriteを追加し、推奨されているhttpsを追加。
+ また、モジュールを追加したいときのためにenable-soを追加。
+
+サイト：
+[要件 \| WordPress.org 日本語](https://ja.wordpress.org/about/requirements/)
+
+補足：
+モジュールの追加はapxs(APache eXtenSion tool)]
+apacheHTTPサーバで拡張モジュールを追加したいときに使用する。
+[apxs - APache eXtenSion tool - Apache HTTP Server Version 2.4](https://httpd.apache.org/docs/2.4/programs/apxs.html)
+makeファイル作成時(configure実行時)にenable-soをいれておく必要がある。
+
+mod_rewrite、、
+pcre(パール互換のある正規表現)に基づいた、リクエストをリダイレクトするためのモジュール。
+デフォルトではURLとファイルシステムがマッピングしているが、違うURLにリダイレクトさせることが可能。
+[mod_rewrite - Apache HTTP Server Version 2.4](https://httpd.apache.org/docs/2.4/mod/mod_rewrite.html)
+
+checking for OpenSSL... checking for user-provided OpenSSL base directory... none
+checking for OpenSSL version >= 0.9.8a... FAILED
+configure: WARNING: OpenSSL version is too old
+no
+checking whether to enable mod_ssl... configure: error: mod_ssl has been requested but can not be built due to prerequisite failures
+[admin@localhost httpd-2.4.52]$ echo $?
+1
+→mod_sslのバージョンが古くてエラー。(yum updateしたばかり。)
+
+→modssl-develがないと出るようなので、modssl-develをインストール
+
+[admin@localhost httpd-2.4.52]$ sudo yum install openssl-devel
+
+補足：openssl-develについて
+http://penguin.triumf.ca/comps/9/ja_frames/rpms/openssl-devel.php
+
+-devel：各種アルゴリズム、プロトコルをサポートしたアプリケーション開発に必要なライブラリ、ヘッダーファイルが含まれている。
+
+補足：sslとtls
+フォールバックを利用する中間者攻撃の脆弱性があったが、その脆弱性を解消したのがtls
+
+[admin@localhost httpd-2.4.52]$ sudo make
+
+[admin@localhost httpd-2.4.52]$ echo $?
+0
+
+→正常終了
+
+[admin@localhost httpd-2.4.52]$ sudo make install
+
+[admin@localhost httpd-2.4.52]$ echo $?
+0
+
+[admin@localhost conf]$cd /usr/local/apache2/conf
+[admin@localhost conf]$ ls -l
+合計 100
+drwxr-xr-x. 2 root root  4096  1月  6 16:09 extra
+-rw-r--r--. 1 root root 18436  1月  6 16:09 httpd.conf
+-rw-r--r--. 1 root root 13064  1月  6 16:09 magic
+-rw-r--r--. 1 root root 60847  1月  6 16:09 mime.types
+drwxr-xr-x. 3 root root    37  1月  6 16:09 original
+
+[admin@localhost conf]$ vi httpd.conf
+(新)ServerName localhost:80
+(旧)#ServerName www.example.com:80
+
+[admin@localhost conf]$ sudo systemctl status firewalld
+● firewalld.service - firewalld - dynamic firewall daemon
+   Loaded: loaded (/usr/lib/systemd/system/firewalld.service; enabled; vendor preset: enabled)
+   Active: active (running) since 木 2022-01-06 11:12:58 JST; 5h 2min ago
+   
+→firewallがactiveであることを確認
+
+[admin@localhost conf]$ sudo firewall-cmd --add-service=http --permanent
+success
+
+→httpの通信許可設定
+
+[admin@localhost conf]$ sudo firewall-cmd --reload
+success
+
+→設定変更後再読み込み
+
+[admin@localhost conf]$ exit
+→virtualboxのネットワーク設定を変更するためにログアウト
+
+ホストポートの8088を仮想サーバ側の80ポートにフォワーリングするよう設定し
+再度ログイン
+
+[admin@localhost bin]$ cd /usr/local/apache2/bin
+[admin@localhost bin]$ sudo ./apachectl start
+
+→apacheを起動
+
+[admin@localhost htdocs]$ cd /usr/local/apache2/htdocs
+[admin@localhost htdocs]$ sudo vi index.html
+
+(新)<html><body><h1>Hello World!</h1></body></html>
+(旧)<html><body><h1>It works!</h1></body></html>
+
