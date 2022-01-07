@@ -1,0 +1,451 @@
+[2022/1/7]研修タスクまとめ
+
+大枠
+1.mysqlの前提条件確認
+※wordpress導入のため、バージョン5.7以上を導入する。
+
+cmakeが必要。
+
+補足：makeとcmakeの違い、、、
+
+cmakeはクロスプラットフォームにおけるビルドを簡単に行うことができる。
+
+クロスプラットフォームではmakeは不向き?
+
+→mysqlは色々なOSで動作するので、configureではなくcmakeを使用する。
+(configureコマンド同様Makefileができることを確認する。)
+
+補足：mysqlのバージョン5.1まではconfigureコマンドを使用していたため、古いバージョンをビルドする場合はconfigureコマンドを使用する。
+
+参考サイト：(https://atmarkit.itmedia.co.jp/ait/articles/1203/02/news117.html)
+
+[admin@localhost ~]$ cmake --version
+bash: cmake: コマンドが見つかりませんでした...
+
+[admin@localhost ~]$ sudo yum install cmake
+
+[admin@localhost ~]$ cmake --version
+cmake version 2.8.12.2
+
+→cmakeをインストール
+
+[admin@localhost ~]$ gcc --version
+gcc (GCC) 4.8.5 20150623 (Red Hat 4.8.5-44)
+Copyright (C) 2015 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+→mysqlの要件のGCC 4.2.1 以降であるためOK
+
+[admin@localhost ~]$ perl --version
+
+This is perl 5, version 16, subversion 3 (v5.16.3) built for x86_64-linux-thread-multi
+(with 41 registered patches, see perl -V for more detail)
+
+→テストスクリプトの実行にperlが必要。
+ 入っているためOK
+ 
+ [admin@localhost mysql-8.0.27-el7-x86_64]$ bison --version
+bison (GNU Bison) 3.0.4
+
+→すべてのプラットフォーム(OS)でbisonが必要。
+ 入っているためOK
+ 
+ 補足：bison
+、、、sqlの構文解析を行う。(パーサー)
+
+[Bison - GNU Project - Free Software Foundation](https://www.gnu.org/software/bison/)
+
+[admin@localhost ~]$ cd /usr/local/src/
+
+[admin@localhost src]$ sudo curl -LO https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-8.0.27-el7-x86_64.tar.gz
+
+[admin@localhost src]$ sudo tar xzfv mysql-8.0.27-el7-x86_64.tar.gz
+
+→mysqlのダウンロードと解凍
+
+[admin@localhost bld]$ sudo groupadd mysql
+[admin@localhost bld]$ sudo useradd -r -g mysql -s /bin/false mysql
+
+→mysqlを起動するユーザを追加。
+
+補足 useraddオプション
+-r システムアカウントとして作成
+   (mysql用専用のアカウントのため。)
+   
+-s /bin/false
+   →ユーザからスイッチできなくするため、false指定
+        (インストールしたmysqlを所有させるため、セキュリティ観点から
+        ログインできない専用ユーザを作成？)
+   
+↑ここまで6日に実施----------------------------------
+
+[admin@localhost mysql-8.0.27-el7-x86_64]$ sudo less /etc/passwd | grep mysql
+[sudo] admin のパスワード:
+mysql:x:988:1001::/home/mysql:/bin/false
+
+→ユーザが存在することを確認
+
+導入したmysqlがソースコンパイル用でなかったため、削除して再度ダウンロード
+
+[admin@localhost src]$ ls
+apr-1.7.0         apr-util-1.6.1         httpd-2.4.52         mysql-8.0.27-el7-x86_64
+apr-1.7.0.tar.gz  apr-util-1.6.1.tar.gz  httpd-2.4.52.tar.gz  mysql-8.0.27-el7-x86_64.tar.gz
+
+[admin@localhost src]$ sudo rm -f mysql-8.0.27-el7-x86_64.tar.gz
+
+[admin@localhost src]$ ls
+apr-1.7.0  apr-1.7.0.tar.gz  apr-util-1.6.1  apr-util-1.6.1.tar.gz  httpd-2.4.52  httpd-2.4.52.tar.gz  mysql-8.0.27-el7-x86_64
+
+[admin@localhost src]$ sudo rm -rf mysql-8.0.27-el7-x86_64
+[admin@localhost src]$ ls
+apr-1.7.0  apr-1.7.0.tar.gz  apr-util-1.6.1  apr-util-1.6.1.tar.gz  httpd-2.4.52  httpd-2.4.52.tar.gz
+
+→圧縮・解凍済みファイルの両方を削除
+
+[admin@localhost src]$ sudo curl -LO https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-boost-8.0.27.tar.gz
+
+→mysqlのソースコンパイルにboostを使用するため、以下2つのうち「Includes Boost Headers」をダウンロード
+
+・Compressed TAR Archive
+・Compressed TAR Archive, Includes Boost Headers←
+
+補足：boostは何に使用しているのか。
+→GISの実装に使用している。
+[Boostを使用しているプロジェクト - boostjp](https://boostjp.github.io/used_project.html)
+
+補足：GISとは
+地理情報システム(GIS：Geographic Information System)は、地理的位置を手がかりに、位置に関する情報を持った
+データ（空間データ）を総合的に管理・加工し、視覚的に
+表示し、高度な分析や迅速な判断を可能にする技術
+
+→mysqlでは位置情報を格納するためのデータ型(Geometry型)が存在するため、地理情報を扱ったデータ加工が可能。
+
+サイト：[](https://event.ospn.jp/slides/OSC2020-Online-Hiroshima/20200919_GIS_MyNA.pdf)
+[MySQL :: MySQL 8.0 リファレンスマニュアル :: 11.4.1 空間データ型](https://dev.mysql.com/doc/refman/8.0/ja/spatial-type-overview.html)
+
+[admin@localhost src]$ sudo tar xzfv mysql-boost-8.0.27.tar.gz 
+
+[admin@localhost src]$ cd mysql-8.0.27/
+
+[admin@localhost mysql-8.0.27]$ less configure.cmake
+
+→一応中身確認。OSに応じて読み込むヘッダーファイルを変えたり、、
+
+[admin@localhost mysql-8.0.27]$ sudo mkdir bld
+
+[admin@localhost mysql-8.0.27]$ cd bld
+
+→ビルド用ディレクトリを作成し、移動
+
+[admin@localhost bld]$ sudo cmake .. 
+[sudo] admin のパスワード:
+-- Running cmake version 2.8.12.2
+CMake Warning at CMakeLists.txt:82 (MESSAGE):
+  Please use cmake3 rather than cmake on this platform
+
+
+-- Please install cmake3 (yum install cmake3)
+CMake Error at CMakeLists.txt:112 (CMAKE_MINIMUM_REQUIRED):
+  CMake 3.5.1 or higher is required.  You are running version 2.8.12.2
+
+
+-- Configuring incomplete, errors occurred!
+
+→cmakeコマンドを実行したらcmakeのバージョンが古いためエラー。
+
+[admin@localhost src]$ sudo curl -LO https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1.tar.gz
+
+[admin@localhost src]$ sudo tar xzfv cmake-3.22.1.tar.gz
+
+→3.5.1以上のcmakeをダウンロード
+
+[admin@localhost cmake-3.22.1]$ cd /usr/local/src/cmake-3.22.1
+
+[admin@localhost cmake-3.22.1]$ sudo ./configure
+
+→bootstrapを実行しているだけ。
+ bootstrapでMakefileを作成。
+
+[admin@localhost cmake-3.22.1]$ echo $?
+0
+
+[admin@localhost cmake-3.22.1]$ ls Makefile
+Makefile
+
+[admin@localhost cmake-3.22.1]$ sudo make
+
+[admin@localhost cmake-3.22.1]$ echo $?
+0
+
+[admin@localhost cmake-3.22.1]$ sudo make install
+
+[admin@localhost cmake-3.22.1]$ echo $?
+0
+
+[admin@localhost cmake-3.22.1]$ cmake --version
+cmake version 3.22.1
+
+→インストール後にバージョンが上がっていることを確認
+
+[admin@localhost bld]$ cd /usr/local/src/mysql-8.0.27/bld
+[admin@localhost bld]$ ls
+CMakeCache.txt  CMakeFiles
+
+[admin@localhost bld]$ cd ..
+
+[admin@localhost mysql-8.0.27]$ sudo rm -rf bld
+
+→途中までファイルができているため、クリア。
+ cmake2.xx系はdistcleanに当たるPGMが生成されないため、ビルド用に作成していたbldファイルをそのまま削除。
+ (cmake3.xx系はdistcleanを生成する。)
+ 
+ サイト：[Looking for a 'cmake clean' command to clear up CMake output - Stack Overflow](https://stackoverflow.com/questions/9680420/looking-for-a-cmake-clean-command-to-clear-up-cmake-output)
+ 
+[admin@localhost mysql-8.0.27]$ sudo mkdir bld
+[admin@localhost mysql-8.0.27]$ cd bld
+
+→もう一度bldファイルを作成。
+
+[admin@localhost bld]$ sudo cmake ..
+-- Running cmake version 2.8.12.2
+CMake Warning at CMakeLists.txt:82 (MESSAGE):
+  Please use cmake3 rather than cmake on this platform
+
+
+-- Please install cmake3 (yum install cmake3)
+CMake Error at CMakeLists.txt:112 (CMAKE_MINIMUM_REQUIRED):
+  CMake 3.5.1 or higher is required.  You are running version 2.8.12.2
+
+
+-- Configuring incomplete, errors occurred!
+[admin@localhost bld]$ cmake --version
+cmake version 3.22.1
+
+→自分でインストールしたcmake3系ではなく、yumでインストールした古いバージョンが参照されているためエラー？
+
+[admin@localhost bld]$ /usr/bin/cmake --version
+cmake version 2.8.12.2
+
+[admin@localhost bld]$ /usr/local/bin/cmake --version
+cmake version 3.22.1
+
+[admin@localhost bld]$ sudo ln -s /usr/local/bin/cmake /usr/bin/cmake3
+[sudo] admin のパスワード:
+[admin@localhost bld]$ ls -l /usr/bin/cmake3
+lrwxrwxrwx. 1 root root 20  1月  7 13:33 /usr/bin/cmake3 -> /usr/local/bin/cmake
+
+→新しいバージョンのcmakeをcmake3として/usr/binにリンクを作成する。
+
+[admin@localhost mysql-8.0.27]$ sudo rm -rf bld
+[admin@localhost mysql-8.0.27]$ sudo mkdir bld
+[admin@localhost mysql-8.0.27]$ cd bld
+
+→ファイルの再作成
+
+
+[admin@localhost bld]$ sudo cmake3 ..
+-- Running cmake version 3.22.1
+-- Found Git: /bin/git (found version "1.8.3.1")
+-- This is .el7. as found from 'rpm -qf /'
+-- Looking for a devtoolset compiler
+CMake Warning at CMakeLists.txt:347 (MESSAGE):
+  Could not find devtoolset compiler/linker in /opt/rh/devtoolset-10
+
+
+CMake Warning at CMakeLists.txt:349 (MESSAGE):
+  You need to install the required packages:
+
+   yum install devtoolset-10-gcc devtoolset-10-gcc-c++ devtoolset-10-binutils
+
+
+
+CMake Error at CMakeLists.txt:351 (MESSAGE):
+  Or you can set CMAKE_C_COMPILER and CMAKE_CXX_COMPILER explicitly.
+  
+
+→cmakeのバージョンは問題ないが、パッケージの不足でエラーになった。
+
+[admin@localhost bld]$ sudo yum install devtoolset-10-gcc devtoolset-10-gcc-c++ devtoolset-10-binutils
+読み込んだプラグイン:fastestmirror, langpacks
+Loading mirror speeds from cached hostfile
+ * base: ftp-srv2.kddilabs.jp
+ * extras: ftp-srv2.kddilabs.jp
+ * updates: ftp-srv2.kddilabs.jp
+パッケージ devtoolset-10-gcc は利用できません。
+パッケージ devtoolset-10-gcc-c++ は利用できません。
+パッケージ devtoolset-10-binutils は利用できません。
+エラー: 何もしません
+
+→必要パッケージが新しくてインストールできない。
+
+[admin@localhost bld]$ sudo yum install centos-release-scl-rh
+
+→devtoolset-10をインストールするため、SCLリポジトリを登録。
+
+SCLリポジトリ(Software Collections)とは、、
+レッドハット用に新しいバージョンのソフトウェアを提供してくれるリポジトリ。
+レッドハットは長期的なサポートを提供するため、新しいバージョのソフトウェアを提供していない可能性がある。
+そのため、サポートは短期(3年)だが新しいバージョンのソフトウェアを提供するのがSoftware Collections。
+今回はインストールしようとしたdevtoolset-10が新しくインストールできなかったため、新たに登録。
+
+[admin@localhost bld]$ yum install devtoolset-10
+
+→devtoolset-10をインストール。
+
+[admin@localhost bld]$ sudo yum list installed devtoolset-10-gcc
+読み込んだプラグイン:fastestmirror, langpacks
+Loading mirror speeds from cached hostfile
+ * base: ftp-srv2.kddilabs.jp
+ * centos-sclo-rh: ftp-srv2.kddilabs.jp
+ * extras: ftp-srv2.kddilabs.jp
+ * updates: ftp-srv2.kddilabs.jp
+インストール済みパッケージ
+devtoolset-10-gcc.x86_64                                    10.2.1-11.1.el7                                     @centos-sclo-rh
+[admin@localhost bld]$ sudo yum list installed devtoolset-10-gcc-c++
+読み込んだプラグイン:fastestmirror, langpacks
+Loading mirror speeds from cached hostfile
+ * base: ftp-srv2.kddilabs.jp
+ * centos-sclo-rh: ftp-srv2.kddilabs.jp
+ * extras: ftp-srv2.kddilabs.jp
+ * updates: ftp-srv2.kddilabs.jp
+インストール済みパッケージ
+devtoolset-10-gcc-c++.x86_64                                  10.2.1-11.1.el7                                   @centos-sclo-rh
+[admin@localhost bld]$ sudo yum list installed devtoolset-10-binutils
+読み込んだプラグイン:fastestmirror, langpacks
+Loading mirror speeds from cached hostfile
+ * base: ftp-srv2.kddilabs.jp
+ * centos-sclo-rh: ftp-srv2.kddilabs.jp
+ * extras: ftp-srv2.kddilabs.jp
+ * updates: ftp-srv2.kddilabs.jp
+インストール済みパッケージ
+devtoolset-10-binutils.x86_64                                   2.35-5.el7.2                                    @centos-sclo-rh
+
+→必要なパッケージがインストールされていることを確認
+
+[admin@localhost mysql-8.0.27]$ sudo rm -rf bld
+
+[admin@localhost mysql-8.0.27]$ sudo mkdir bld && cd bld
+
+[admin@localhost bld]$ sudo cmake3 ..
+CMake Error at cmake/boost.cmake:107 (MESSAGE):
+  You can download it with -DDOWNLOAD_BOOST=1 -DWITH_BOOST=<directory>
+
+  This CMake script will look for boost in <directory>.  If it is not there,
+  it will download and unpack it (in that directory) for you.
+
+  You can also download boost manually, from
+  https://boostorg.jfrog.io/artifactory/main/release/1.73.0/source/boost_1_73_0.tar.bz2
+
+
+  If you are inside a firewall, you may need to use an https proxy:
+
+  export https_proxy=http://example.com:80
+
+Call Stack (most recent call first):
+  cmake/boost.cmake:276 (COULD_NOT_FIND_BOOST)
+  CMakeLists.txt:1415 (INCLUDE)
+
+
+-- Configuring incomplete, errors occurred!
+See also "/usr/local/src/mysql-8.0.27/bld/CMakeFiles/CMakeOutput.log".
+See also "/usr/local/src/mysql-8.0.27/bld/CMakeFiles/CMakeError.log".
+
+→boostが見つからなかったためエラー
+
+[admin@localhost mysql-8.0.27]$ sudo rm -rf bld && sudo mkdir bld && cd bld
+
+[admin@localhost bld]$ sudo cmake3 .. -DWITH_BOOST=../boost
+
+CMake Error at cmake/readline.cmake:71 (MESSAGE):
+  Curses library not found.  Please install appropriate package,
+
+      remove CMakeCache.txt and rerun cmake.On Debian/Ubuntu, package name is libncurses5-dev, on Redhat and derivates it is n                          urses-devel.
+Call Stack (most recent call first):
+  cmake/readline.cmake:105 (FIND_CURSES)
+  cmake/readline.cmake:199 (MYSQL_USE_BUNDLED_EDITLINE)
+  CMakeLists.txt:1700 (MYSQL_CHECK_EDITLINE)
+
+
+-- Configuring incomplete, errors occurred!
+See also "/usr/local/src/mysql-8.0.27/bld/CMakeFiles/CMakeOutput.log".
+See also "/usr/local/src/mysql-8.0.27/bld/CMakeFiles/CMakeError.log".
+
+→Cursesライブラリが見つからなったためエラー。
+ レッドハットなのでncurses-develをインストール。
+ 
+ [admin@localhost bld]$ sudo rpm -ivh http://rpmfind.net/linux/centos/7.9.2009/os/x86_64/Packages/ncurses-devel-5.9-14.20130511.el7_4.x86_64.rpm
+http://rpmfind.net/linux/centos/7.9.2009/os/x86_64/Packages/ncurses-devel-5.9-14.20130511.el7_4.x86_64.rpm を取得中
+準備しています...              ################################# [100%]
+
+[admin@localhost bld]$ yum list installed | grep ncurses-devel
+ncurses-devel.x86_64                        5.9-14.20130511.el7_4      installed
+
+→インストールおよびインストール確認
+
+  補足：Cursesとは、、
+  
+  Unix系システムでの端末制御ライブラリである。テキストユーザインタフェース (TUI) アプリケーションを作成するのに使われる。
+  CLIでユーザが対話式にDB操作を行うために必要？
+  
+  [curses - Wikipedia](https://ja.wikipedia.org/wiki/Curses)
+  
+[admin@localhost bld]$ sudo cmake3 .. -DWITH_BOOST=../boost
+
+[admin@localhost bld]$ echo $?
+0
+
+→正常終了
+
+[admin@localhost bld]$ cat Makefile >> ~/makefile_of_mysql.txt
+
+→一応Makefileをホームディレクトリに置いておく。
+
+[admin@localhost bld]$ sudo make
+
+→メモリ量が少なく時間がかなりかかっていたため、メモリを以下の通り増設
+2GB→8GB
+
+[admin@localhost ~]$ free
+              total        used        free      shared  buff/cache   available
+Mem:        8009172      593460     7071596       11648      344116     7170268
+Swap:       2097148           0     2097148
+
+→メモリ量を確認
+
+[admin@localhost mysql-8.0.27]$ sudo rm -rf bold && sudo mkdir bld && cd bld
+
+[admin@localhost bld]$ sudo cmake3 .. -DWITH_BOOST=../boost
+
+→速度変わらないため、同時実行数を増やして再コンパイルため中断
+
+[admin@localhost mysql-8.0.27]$ sudo rm -rf bld
+[admin@localhost mysql-8.0.27]$ sudo mkdir bld && cd bld
+
+[admin@localhost bld]$ sudo cmake3 .. -DWITH_BOOST=../boost
+
+[admin@localhost bld]$ sudo make -j
+
+g++: fatal error: 強制終了 signal terminated program cc1plus
+
+→メモリ不足で停止したため、再度やり直し。
+
+サイト：<https://omohikane.com/centos_internal_compiler_error/>
+
+[admin@localhost mysql-8.0.27]$ sudo rm -rf bld && sudo mkdir bld && cd bld
+
+[admin@localhost bld]$ sudo cmake3 .. -DWITH_BOOST=../boost
+
+[admin@localhost bld]$ echo $?
+0
+
+[admin@localhost bld]$ sudo make -j3
+
+→同時実行数を指定して再実行
+
+補足：virtualboxはCPUコア1で作成したので、メモリよりもCPUがボトルネックになっている可能性がある。
+(CPUを最初に調べる+コアを増やすなど対応する。)
+
+補足：以下内容について調べておく。
+load average
+(topコマンドの見方。)
