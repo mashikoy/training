@@ -1,0 +1,184 @@
+[admin@localhost src]$ df -k
+ファイルシス            1K-ブロック     使用  使用可 使用% マウント位置
+devtmpfs                    3987576        0 3987576    0% /dev
+tmpfs                       4004584        0 4004584    0% /dev/shm
+tmpfs                       4004584     9412 3995172    1% /run
+tmpfs                       4004584        0 4004584    0% /sys/fs/cgroup
+/dev/mapper/centos-root    22001156 20746756 1254400   95% /
+/dev/sda1                   1038336   188968  849368   19% /boot
+tmpfs                        800920       12  800908    1% /run/user/42
+tmpfs                        800920        0  800920    0% /run/user/1000
+
+→centos-rootが95%になっていることを確認。
+
+[admin@localhost mysql-8.0.27]$ sudo rm -rf bld/
+
+→一度ビルド用ディレクトリを削除する。
+
+[admin@localhost mysql-8.0.27]$ df -k
+ファイルシス            1K-ブロック    使用   使用可 使用% マウント位置
+devtmpfs                    3987576       0  3987576    0% /dev
+tmpfs                       4004584       0  4004584    0% /dev/shm
+tmpfs                       4004584    9420  3995164    1% /run
+tmpfs                       4004584       0  4004584    0% /sys/fs/cgroup
+/dev/mapper/centos-root    22001156 7090012 14911144   33% /
+/dev/sda1                   1038336  188968   849368   19% /boot
+tmpfs                        800920      12   800908    1% /run/user/42
+tmpfs                        800920       0   800920    0% /run/user/1000
+
+→→centos-rootが33%に減少していることをを確認。
+
+[admin@localhost mysql-8.0.27]$ exit
+
+→virtualboxのディスク容量を増設するためにexit
+
+～virtualboxの設定変更で、仮想ディスクの容量を変更
+　24GB→60GB
+
+[admin@localhost ~]$ sudo fdisk /dev/sda
+
+コマンド (m でヘルプ): p
+
+Disk /dev/sda: 64.4 GB, 64424509440 bytes, 125829120 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O サイズ (最小 / 推奨): 512 バイト / 512 バイト
+Disk label type: dos
+ディスク識別子: 0x000af769
+
+デバイス ブート      始点        終点     ブロック   Id  システム
+/dev/sda1   *        2048     2099199     1048576   83  Linux
+/dev/sda2         2099200    50331647    24116224   8e  Linux LVM
+
+→現在のパーティションの情報を表示
+
+ディスク容量：
+125829120(セクタ数) * 512b /1024/1024/1024 = 約60GB
+
+使用量：
+50329599(セクタ数 50331647-2048) * 512b /1024/1024/1024 = 約24GB
+
+コマンド (m でヘルプ): d
+パーティション番号 (1,2, default 2): 2
+Partition 2 is deleted
+
+→パーティション2を削除
+
+コマンド (m でヘルプ): n
+Partition type:
+   p   primary (1 primary, 0 extended, 3 free)
+   e   extended
+Select (default p): p
+パーティション番号 (2-4, default 2): 2
+最初 sector (2099200-125829119, 初期値 2099200): 2099200       
+初期値 2099200 を使います
+Last sector, +sectors or +size{K,M,G} (2099200-125829119, 初期値 125829119): 
+初期値 125829119 を使います
+Partition 2 of type Linux and of size 59 GiB is set
+
+→パーティション2を作成(増設した分の容量を使用するパーティションを再作成)
+
+コマンド (m でヘルプ): w
+パーティションテーブルは変更されました！
+
+ioctl() を呼び出してパーティションテーブルを再読込みします。
+
+WARNING: Re-reading the partition table failed with error 16: デバイスもしくはリソースがビジー状態です.
+The kernel still uses the old table. The new table will be used at
+the next reboot or after you run partprobe(8) or kpartx(8)
+ディスクを同期しています。
+
+→セーブし再読み込み
+
+[admin@localhost ~]$ sudo reboot
+
+リブート後teratermで再接続
+
+[admin@localhost ~]$ sudpvresize /dev/sda2sudo 
+  Physical volume "/dev/sda2" changed
+  1 physical volume(s) resized or updated / 0 physical volume(s) not resized
+  
+→拡張したパーティションにおける物理ボリュームを拡張  
+  
+[admin@localhost ~]$ sudo lvextend -l +100%FREE /dev/centos/root
+  Size of logical volume centos/root changed from 20.99 GiB (5374 extents) to <57.00 GiB (14591 extents).
+  Logical volume centos/root successfully resized.
+
+→論理ボリュームを拡張(20.99GB)→57GB
+
+[admin@localhost ~]$ sudo xfs_growfs /dev/centos/root
+meta-data=/dev/mapper/centos-root isize=512    agcount=4, agsize=1375744 blks
+         =                       sectsz=512   attr=2, projid32bit=1
+         =                       crc=1        finobt=0 spinodes=0
+data     =                       bsize=4096   blocks=5502976, imaxpct=25
+         =                       sunit=0      swidth=0 blks
+naming   =version 2              bsize=4096   ascii-ci=0 ftype=1
+log      =internal               bsize=4096   blocks=2687, version=2
+         =                       sectsz=512   sunit=0 blks, lazy-count=1
+realtime =none                   extsz=4096   blocks=0, rtextents=0
+data blocks changed from 5502976 to 14941184
+
+→ファイルシステムのブロック数を拡張
+
+[admin@localhost mysql-8.0.27]$ cd /usr/local/src/mysql-8.0.27
+  [admin@localhost mysql-8.0.27]$ sudo mkdir bld && cd bld
+
+[admin@localhost bld]$ sudo cmake3 .. -DWITH_BOOST=../boost
+[admin@localhost bld]$ echo $?
+0
+
+[admin@localhost bld]$ sudo make
+
+
+補足：
+・a.拡張子について
+コンパイルしたオブジェクトファイルをarコマンドで一つの実行ファイルにしたもの。
+含まれているプログラムを修正する場合はリンクしなおす必要がある。
+サイト：
+[ライブラリについて解説！静的・動的とは？それぞれのメリットは？ \| だえうホームページ](https://daeudaeu.com/library/#i-5)
+
+・ innodbとは、、
+Mysql(とmariadb)のためのデータベースエンジン。
+基本的なACIDモデルに対応している。
+サイト：[15.1 InnoDB 入門](https://docs.oracle.com/cd/E17952_01/mysql-8.0-ja/innodb-introduction.html)
+
+
+[admin@localhost bld]$ sudo make
+
+[admin@localhost bld]$ echo $?
+0
+
+→コンパイル完了
+
+[admin@localhost bld]$ sudo make install
+
+[admin@localhost bld]$ echo $?
+0
+
+→インストール完了
+
+shell> cd /usr/local/mysql
+shell> chown -R mysql .
+shell> chgrp -R mysql .
+
+[admin@localhost mysql]$ ls -ltr
+合計 620
+-rw-r--r--.  1 mysql mysql    679  9月 28 20:46 README.router
+-rw-r--r--.  1 mysql mysql    666  9月 28 20:46 README-test
+-rw-r--r--.  1 mysql mysql    666  9月 28 20:46 README
+-rw-r--r--.  1 mysql mysql  47657  9月 28 20:46 LICENSE.router
+-rw-r--r--.  1 mysql mysql 276550  9月 28 20:46 LICENSE-test
+-rw-r--r--.  1 mysql mysql 276550  9月 28 20:46 LICENSE
+-rw-r--r--.  1 mysql mysql   1623  1月 10 15:25 mysqlrouter-log-rotate
+drwxr-xr-x.  3 mysql mysql    282  1月 10 18:19 include
+drwxr-xr-x.  6 mysql mysql    207  1月 10 18:19 lib
+drwxr-xr-x. 10 mysql mysql   4096  1月 10 18:20 mysql-test
+drwxr-xr-x. 28 mysql mysql   4096  1月 10 18:20 share
+drwxr-xr-x.  2 mysql mysql     77  1月 10 18:20 support-files
+drwxr-xr-x.  2 mysql mysql     86  1月 10 18:20 docs
+drwxr-xr-x.  3 mysql mysql     17  1月 10 18:20 var
+drwxrwxr-x.  2 mysql mysql      6  1月 10 18:20 run
+drwxr-xr-x.  2 mysql mysql   4096  1月 10 18:20 bin
+drwxr-xr-x.  4 mysql mysql     30  1月 10 18:20 man
+
+→インストール先のディレクトリに移動し、所有ユーザと所有グループをすべてmysqlに変更
