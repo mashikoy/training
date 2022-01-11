@@ -1,0 +1,460 @@
+[2022/1/11]研修タスクまとめ(一部不要だった作業あり。)
+
+◆大枠
+1.mysqlセッティング+テスト(「作業フロー(mysqlセッティング+テスト)」を参照)
+2.レプリケーション作成←確認してから
+3.phpビルド作業(時間があれば)
+
+◆作業フロー(mysqlセッティング+テスト)
+1)データディレクトリの初期化
+2)サーバ起動
+3)サーバテスト
+4)初期Mysqlアカウントの保護
+5)Mysqlの自動起動+停止
+
+サイト)
+[MySQL :: MySQL 8.0 リファレンスマニュアル :: 2.10 インストール後のセットアップとテスト](https://dev.mysql.com/doc/refman/8.0/ja/postinstallation.html)
+
+◆前提事項
+インストールしたmysqlディレクトリの所有ユーザとグループは変更済み
+
+◆実作業内容
+[admin@localhost ~]$ cd /usr/local/mysql/
+[admin@localhost mysql]$ sudo mkdir mysql-files
+[admin@localhost mysql]$ ls -ltr
+～
+drwxr-xr-x.  2 mysql mysql   4096  1月 10 18:20 bin
+drwxr-xr-x.  4 mysql mysql     30  1月 10 18:20 man
+drwxr-xr-x.  2 root  root       6  1月 11 10:27 mysql-files
+
+→「mysql-files」ディレクトリを作成
+
+[admin@localhost mysql]$ sudo chown mysql:mysql mysql-files
+[admin@localhost mysql]$ ls -ltr
+～
+drwxr-xr-x.  2 mysql mysql   4096  1月 10 18:20 bin
+drwxr-xr-x.  4 mysql mysql     30  1月 10 18:20 man
+drwxr-xr-x.  2 mysql mysql      6  1月 11 10:27 mysql-files
+
+→所有ユーザと所有ディレクトリをmysqlに変更
+
+[admin@localhost mysql]$ sudo chmod 750 mysql-files
+[admin@localhost mysql]$ ls -ltr
+～
+drwxr-xr-x.  2 mysql mysql   4096  1月 10 18:20 bin
+drwxr-xr-x.  4 mysql mysql     30  1月 10 18:20 man
+drwxr-x---.  2 mysql mysql      6  1月 11 10:27 mysql-files
+
+→ディレクトリのパーミッションから、「その他」を削除
+
+[admin@localhost mysql]$ sudo bin/mysqld --initialize --user=mysql
+～
+2022-01-11T01:36:55.025816Z 6 [Note] [MY-010454] [Server] A temporary password is generated for root@localhost: J:IP6o=ihedT
+
+→mysqlサーバの起動。
+「--initialize」オプションをつけて、初期化を実行。
+　※「--initialize-insecure」だとrootのパスワード設定を発行しない。
+　　セキュリティ観点から非推奨のため、今回は「--initialize」オプションで実行 　　
+　※初期化はMysqlをインストールした後にのみ実行する。
+
+「--user=mysql」をつけて、実行ユーザをmysqlで指定。
+
+補足：mysql_install_dbとは、、、
+perlで書かれた初期化用スクリプトファイル。
+は MySQL データディレクトリを初期化し、システムテーブルを作成する。
+また、InnoDB テーブルの管理に必要な、システムのテーブルスペースおよび関係するデータ構造体も初期化する。
+
+インストール方法によっては自動で実行されるが(yumなどのパッケージングシステムを使用したインストールなど)、今回はソースビルドなので手動で実行する。
+
+参考サイト
+[MySQL :: MySQL 5.6 リファレンスマニュアル :: 4.4.3 mysql_install_db — MySQL データディレクトリの初期化](https://dev.mysql.com/doc/refman/5.6/ja/mysql-install-db.html)
+
+
+システムテーブルスペースとは、、、
+undoログ、変更バッファー、二重書き込みバッファーのストレージ領域のメタデータを含むデータファイル 。
+
+参考サイト
+[MySQL :: MySQL 5.6 リファレンスマニュアル :: MySQL 用語集](https://dev.mysql.com/doc/refman/5.6/ja/glossary.html#glos_system_tablespace)
+
+
+二重書き込みバッファーとは、、
+二重書込みバッファは、InnoDB データファイル内の適切な位置にページを書き込む前に、バッファプールからフラッシュされたページを InnoDB が書き込む記憶域。 ページ書込み中にオペレーティングシステム、ストレージサブシステムまたは予期しない mysqld プロセスが終了した場合、InnoDB はクラッシュリカバリ中に二重書込みバッファからページの適切なコピーを見つけることができる。
+[MySQL :: MySQL 8.0 リファレンスマニュアル :: 15.6.4 二重書き込みバッファー](https://dev.mysql.com/doc/refman/8.0/ja/innodb-doublewrite-buffer.html)
+
+フラッシュとは、、
+メモリー領域または一時ディスクストレージ領域にバッファリングされていた変更をデータベースファイルに書き込むこと。 
+定期的にフラッシュされる InnoDB ストレージ構造には、Redo ログ、Undo ログ、およびバッファープールが含まれる。
+フラッシュを一度に行われるのではなく、小さなバッチをフラッシュする方法をファジーチェックポイントという。
+[MySQL 用語集](https://man.plustar.jp/mysql/glossary.html#glos_flush)
+
+[admin@localhost mysql]$ sudo bin/mysql_ssl_rsa_setup
+→SSLを使用して接続を行うため、スクリプトファイル(SSLとRSA鍵を作成)を実行。
+ 
+ [admin@localhost mysql]$ echo $?
+0
+
+[admin@localhost mysql]$ sudo find / -name 'ca.pem'
+/var/lib/mysql/ca.pem
+
+[admin@localhost mysql]$ sudo find / -name 'server-cert.pem'
+/var/lib/mysql/server-cert.pem
+
+[admin@localhost mysql]$ sudo find / -name 'server-key.pem'
+/var/lib/mysql/server-key.pem
+
+→SSLファイルが存在することを確認
+
+[admin@localhost mysql]$ sudo find / -name 'private_key.pem'
+/var/lib/mysql/private_key.pem
+[admin@localhost mysql]$ sudo find / -name 'public_key.pem'
+/var/lib/mysql/public_key.pem
+
+→RSAファイルが存在することを確認
+ 
+  
+ 補足：mysql_ssl_rsa_setupの動きについて
+  (1)PATH 環境変数で指定された場所で openssl バイナリをチェックする。
+     なかったら、、、何もしない。
+     　あったら、、、データディレクトリ内でSSLファイルとRSAファイルを検索する。
+      
+  (2)次のSSLファイルがないかデータディレクトリをチェックする。
+  　　ca.pem(認証局 ※自己証明)
+      server-cert.pem(サーバ証明書)
+  　　server-key.pem(サーバの鍵、、、用途？？)
+    
+  (3)チェックした結果どれかが存在する場合、SSLファイルを作成しない。
+  　　存在しない場合は作成および追加でファイルの作成を行う。
+    
+    →これらがあるとSSLを使用した安全な通信が可能になる。
+  
+  (4)次のRSAファイルがないかデータディレクトリをチェックする。
+  　　private_key.pem(秘密鍵)      Private member of private/public key pair
+  　　public_key.pem(公開鍵)       Public member of private/public key pair
+    
+  (5)チェックした結果どれかが存在する場合、RSAファイルを作成しない。
+  　　存在しない場合は作成する。
+ 
+　　→これらがあるとRSA over unencrypted接続を使用した安全なパスワード交換(鍵？)が可能になる。
+  
+ 参考サイト(細かな詳細(通信時の動きや期限切れの証明書更新など)が記載されているため、適時参照する。)
+ [MySQL :: MySQL 8.0 リファレンスマニュアル :: 4.4.3 mysql_ssl_rsa_setup — SSL/RSA ファイルの作成](https://dev.mysql.com/doc/refman/8.0/ja/mysql-ssl-rsa-setup.html)
+ 
+ [](https://www.digicert.co.jp/welcome/pdf/wp_sslandroot-certificate.pdf)
+ 
+ 補足2：pem(Privacy Enhanced Mail)について
+ [[OpenSSL] pem ファイルとは？SSL証明書の中身を確認する方法\|てくめも@ecoop.net](https://www.ecoop.net/memo/archives/guide-for-pem.html)
+ 
+ 
+ [admin@localhost mysql]$ ls -l support-files/
+ 合計 20
+-rw-r--r--. 1 mysql mysql  2027  1月 10 15:25 mysql-log-rotate
+-rwxr-xr-x. 1 mysql mysql 10576  1月 10 15:25 mysql.server
+-rwxr-xr-x. 1 mysql mysql  1061  9月 28 20:46 mysqld_multi.server
+
+[admin@localhost mysql]$ less support-files/mysql.server
+
+[admin@localhost mysql]$ sudo cp support-files/mysql.server /etc/init.d/mysqld
+
+→起動スクリプト(mysql.server)を「init.d」ディレクトリに「mysqld」としてコピー
+
+[admin@localhost mysql]$ ls -l /etc/init.d/
+合計 52
+-rw-r--r--. 1 root root  1160 10月  2  2020 README
+-rw-r--r--. 1 root root 18281  5月 22  2020 functions
+-rwxr-xr-x. 1 root root 10576  1月 11 12:30 mysqld
+-rwxr-xr-x. 1 root root  4569  5月 22  2020 netconsole
+-rwxr-xr-x. 1 root root  7928  5月 22  2020 network
+
+[admin@localhost mysql]$ sudo chkconfig --add mysqld
+
+→コンフィグにmysqldを追加
+
+[admin@localhost mysql]$ sudo chkconfig mysqld on
+
+→システム起動時に自動起動するよう設定をonに
+
+[admin@localhost mysql]$ sudo systemctl status mysqld
+● mysqld.service - LSB: start and stop MySQL
+   Loaded: loaded (/etc/rc.d/init.d/mysqld; bad; vendor preset: disabled)
+   Active: inactive (dead)
+     Docs: man:systemd-sysv-generator(8)
+
+→systemctlコマンドで認識されることを確認。
+
+[admin@localhost mysql]$ reboot
+→自動起動されるか確認するために再起動。
+
+[admin@localhost ~]$ sudo systemctl status mysqld
+[sudo] admin のパスワード:
+● mysqld.service - LSB: start and stop MySQL
+   Loaded: loaded (/etc/rc.d/init.d/mysqld; bad; vendor preset: disabled)
+   Active: failed (Result: exit-code) since 火 2022-01-11 12:43:38 JST; 31s ago
+     Docs: man:systemd-sysv-generator(8)
+  Process: 1108 ExecStart=/etc/rc.d/init.d/mysqld start (code=exited, status=1/FAILURE)
+  
+   1月 11 12:43:36 localhost.localdomain systemd[1]: Starting LSB: start and stop MySQL...
+ 1月 11 12:43:38 localhost.localdomain mysqld[1108]: Starting MySQL..2022-01-11T03:43:38.024305Z mysqld_safe error: lo...sql'.
+ 1月 11 12:43:38 localhost.localdomain mysqld[1108]: ERROR! The server quit without updating PID file (/var/lib/mysql/...pid).
+ 1月 11 12:43:38 localhost.localdomain systemd[1]: mysqld.service: control process exited, code=exited status=1
+ 1月 11 12:43:38 localhost.localdomain systemd[1]: Failed to start LSB: start and stop MySQL.
+ 1月 11 12:43:38 localhost.localdomain systemd[1]: Unit mysqld.service entered failed state.
+ 1月 11 12:43:38 localhost.localdomain systemd[1]: mysqld.service failed.
+Hint: Some lines were ellipsized, use -l to show in full.
+
+→エラーになっており、Activeがfailedに、、、
+
+[admin@localhost ~]$ sudo journalctl -xe
+
+-- Unit mysqld.service has begun starting up.
+ 1月 11 12:52:55 localhost.localdomain mysqld[2276]: Starting MySQL.2022-01-11T03:52:55.461239Z mysqld_safe error: log-error set to '/var/log/mariadb/mariadb.log
+ 1月 11 12:52:56 localhost.localdomain mysqld[2276]: ERROR! The server quit without updating PID file (/var/lib/mysql/localhost.localdomain.pid).
+ 1月 11 12:52:56 localhost.localdomain systemd[1]: mysqld.service: control process exited, code=exited status=1
+ 1月 11 12:52:56 localhost.localdomain systemd[1]: Failed to start LSB: start and stop MySQL.
+-- Subject: Unit mysqld.service has failed
+
+→システムログを確認し、エラーが出ていることを確認。
+
+補足：mysqld_safeとは、、
+mysqldサーバを起動する際に、エラーが起きたら再起動したりエラー情報をロギングする。
+今回のエラーはロギング先の指定ディレクトリ(mariadb)が存在しなかったためエラーに、、、
+
+[MySQL :: MySQL 5.6 リファレンスマニュアル :: 4.3.2 mysqld_safe — MySQL サーバー起動スクリプト](https://dev.mysql.com/doc/refman/5.6/ja/mysqld-safe.html)
+
+
+[admin@localhost mysql]$ less /etc/my.cnf
+[mysqld_safe]
+log-error=/var/log/mariadb/mariadb.log
+pid-file=/var/run/mariadb/mariadb.pid
+
+→コンフィグファイルを確認し、出力先を確認
+
+[admin@localhost mysql]$ sudo vim /etc/my.cnf
+
+(修正前)
+[mysqld_safe]
+log-error=/var/log/mariadb/mariadb.log
+pid-file=/var/run/mariadb/mariadb.pid
+
+(修正後)
+[mysqld_safe]
+#log-error=/var/log/mariadb/mariadb.log
+#pid-file=/var/run/mariadb/mariadb.pid
+log-error=/var/log/mysql/mysql.log
+pid-file=/var/run/mysql/mysql.pid
+
+→ロギング先の名称を「mariadb」から「mysql」に変更(わかりにくいため。)
+
+[admin@localhost log]$ cd /var/log/
+[admin@localhost log]$ sudo mkdir mysql
+[admin@localhost log]$ sudo chown mysql:mysql mysql
+
+→ロギング先のディレクトリを作成
+
+[admin@localhost log]$ sudo systemctl start mysqld.service
+[admin@localhost log]$ sudo systemctl status mysqld.service
+● mysqld.service - LSB: start and stop MySQL
+   Loaded: loaded (/etc/rc.d/init.d/mysqld; bad; vendor preset: disabled)
+   Active: active (running) since 火 2022-01-11 13:38:53 JST; 7s ago
+~
+
+→手動で起動を行い、activeになっていることを確認
+
+[admin@localhost log]$ sudo reboot
+
+→自動起動の確認を行うために再起動を実施。
+
+[admin@localhost ~]$ sudo systemctl status mysqld.service
+[sudo] admin のパスワード:
+● mysqld.service - LSB: start and stop MySQL
+   Loaded: loaded (/etc/rc.d/init.d/mysqld; bad; vendor preset: disabled)
+   Active: active (running) since 火 2022-01-11 13:41:34 JST; 17s ago
+
+→自動で起動されていることを確認。
+
+参考サイト：
+[MYSQL8 Startup Error: mysqld_safe error: log-error set to ‘/var/log/mariadb/mariadb.log‘ \| ProgrammerAH](https://programmerah.com/mysql8-startup-error-mysqld_safe-error-log-error-set-to-var-log-mariadb-mariadb-log-43781/)
+
+補足：ブーストラップモード？？
+→グループを初めて起動するプロセス？？
+
+[admin@localhost ~]$ sudo mysql -u root -p
+[sudo] admin のパスワード:
+sudo: mysql: コマンドが見つかりません
+
+[admin@localhost bin]$ export PATH=/usr/local/mysql/bin:$PATH
+
+[admin@localhost bin]$ echo $PATH
+/usr/local/mysql/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/admin/.local/bin:/home/admin/bin
+
+[admin@localhost bin]$ mysql --version
+mysql  Ver 8.0.27 for Linux on x86_64 (Source distribution)
+
+→mysqlコマンドが見つからずにエラーに、、
+ 環境変数PATHにインストールしたMySQLのパスをexportし、
+ mysqlコマンドが使用できるようになることを確認。
+ 
+ [admin@localhost bin]$ sudo vim  /etc/profile
+ 
+ 以下をprofileの末尾に追加。(永続設定)
+ export PATH=/usr/local/mysql/bin:$PATH
+ 
+ [admin@localhost bin]$ sudo reboot
+ 
+ →再起動後もmysqlコマンドが使用できることを確認するために
+  reboot実行
+  
+[admin@localhost ~]$ mysql --version
+mysql  Ver 8.0.27 for Linux on x86_64 (Source distribution)
+
+→再起動後もmysqlコマンドが使用できることを確認。
+
+[admin@localhost ~]$ mysql -u root -p
+Enter password:
+ERROR 2002 (HY000): Can't connect to local MySQL server through socket '/tmp/mysql.sock' (2)
+
+→パスワード入力後、ローカルのmysqlに接続できないエラーに、、、
+
+[admin@localhost ~]$ sudo less /etc/my.cnf
+～
+socket=/var/lib/mysql/mysql.sock
+～
+
+[admin@localhost ~]$ sudo ls -l /var/lib/mysql/mysql.sock
+srwxrwxrwx. 1 mysql mysql 0  1月 11 14:10 /var/lib/mysql/mysql.sock
+
+→コンフィグの記載通りにソケットファイルができていることを確認
+　サーバとクライアントで使用しているディレクトリが以下の通り違うため、サーバのconfigをクライアント側に合うように修正
+
+client:/tmp/mysql.sock
+server:/var/lib/mysql/mysql.sock
+
+何もしてないと-h(host)でlocalhostが指定される。
+localhostを使用するとsocket接続をしに行こうとする。
+
+[admin@localhost ~]$ sudo vim /etc/my.cnf
+
+(修正前)
+socket=/var/lib/mysql/mysql.sock
+
+(修正後)
+#socket=/var/lib/mysql/mysql.sock
+socket=/tmp/mysql.sock
+
+[admin@localhost ~]$ sudo reboot
+
+→configを修正したので念のためリブート
+
+[admin@localhost ~]$ mysql -u root -p
+～
+mysql>
+
+→mysqlに接続できたことを確認。
+
+mysql> ALTER USER 'root'@'localhost' IDENTIFIED BY 'root67iw';
+Query OK, 0 rows affected (0.01 sec)
+
+→rootユーザのパスワードを変更
+
+mysql> select user,host,plugin from mysql.user
+    -> ;
++------------------+-----------+-----------------------+
+| user             | host      | plugin                |
++------------------+-----------+-----------------------+
+| mysql.infoschema | localhost | caching_sha2_password |
+| mysql.session    | localhost | caching_sha2_password |
+| mysql.sys        | localhost | caching_sha2_password |
+| root             | localhost | caching_sha2_password |
++------------------+-----------+-----------------------+
+4 rows in set (0.01 sec)
+
+→DML操作ができることを確認。
+
+
+◆調べること
+
+・サーバ起動時に読み込むファイルは以下2つある。
+
+　/etc/init.d
+　→やや古い
+
+　/etc/systemd
+　→現在は基本的にこちらを使用
+
+→サーバ設定を確認する際は上記2つを確認する必要がある場合があるため、注意する。
+
+・以下を調べる(初期プロセスの実行　※カーネル読み込み後に実行される。)
+
+SysVinit(redhat5以前に使用)
+→/etc/inittab記載のプロセスを順次実行。
+(≠並列実行)
+ 順次実行していく上で重い処理があるとそこがボトルネックになる。
+ 最初の時点では必要のないプロセスも順次実行していくため、効率が悪い。
+ (そのためUpstartやsystemdなどの仕組みが生まれた。)
+
+Upstart(redhat6にて使用)
+→並列で実行可能。
+ inittabを使用せずに(非推奨だが作成は可能)イベント駆動で処理を実施する。
+ デバイスの追加・ネットワークの変更・システム再起動があった際に、
+ /etc/event.d（または /etc/init）に置かれたジョブ定義ファイルのうち、
+ 対象のイベントが引き金となっているファイルの処理を実行する。
+
+systemd(redhat7にて使用)
+→並列で実行可能。
+ 以下の点で優位性があるため現在の主流になっている。
+ 　・より無駄がなく高速起動する。
+   ・SysVinitから以降しやすい・
+   ・異なるディストリビューションでも同じ操作が可能。
+   ・他にも機能追加あり。
+
+[【初級者向け】Linuxシステムの起動 ～ SysVinit、Upstart、systemd ～ \| TECH PROjin](https://tech.pjin.jp/blog/2020/11/11/linux-system-boot-2)
+
+
+◆実施中タスク
+・/etc/my.confの設定をもっとよくする。
+
+何が設定できるのかを調べる。
+mysqldに何を設定するといいのかを調べる。
+
+cf.iniファイル
+   →ディレクトリの役割を果たす。
+
+重要なのは以下項目
+
+・character-set-server
+ →wordpress用にサーバ構築を行う場合はブログ記事に絵文字が含まれる場合があるため
+  utf8mb4を使用する？？
+  (MySQLは文字を3バイトまでしか使用できないため。
+  4バイト目を使用できるようにutf8mb4を使用。
+  4バイト目が使用できないと絵文字が使えない。)
+
+・collation-server
+ →文字コード_言語名_比較方法
+ 
+ 指定方法は以下を参照
+ [(MySQL) 文字コードと照合順序を理解する \| hara-chan.com](https://hara-chan.com/it/programming/mysql-character-set-collation/)
+
+・general_log_file
+ →サーバへの接続・接続解除の情報やスローされたクエリがわかるログの出力先を指定する。
+
+実践ハイパフォーマンスMySQL 8章も読む(サーバ設定の最適化)
+
+
+◆メモ
+cf./var/run
+→ システム起動後の情報が格納されるディレクトリ。
+  (MySQLではPIDを格納したり、、、)
+
+・mysqlで読みこまれるファイルを確認するコマンドと実行例
+[admin@localhost mysql]$ mysql --verbose --help | grep -A 1 'Default options'
+Default options are read from the following files in the given order:
+/etc/my.cnf /etc/mysql/my.cnf /usr/local/mysql/etc/my.cnf ~/.my.cnf
+
+
+・InnoDBとMyISAMの違いについて
+[InnoDBのバッフアプールとMyISAMのキーバッファについて - kasei_sanのブログ](https://blog.kasei-san.com/entry/2019/03/26/230904)
+
+・キーバッファとは、、
+→索引ブロック用に使用されるバッファ
+
+・PIDとは、、、
+process idが記載されたファイル。
