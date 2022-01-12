@@ -1,0 +1,567 @@
+[2022/1/12]研修タスクまとめ
+
+◆大枠
+my.conf修正
+
+◆設定前提
+1)バッファプールのサイズなど、他のプログラム(apache,php,wordpress,OS使用分を想定)にも依存するものについてはwordpress稼働時における実際のメモリ使用をtopコマンドで確認した上で見積りを行うため、現時点では設定しない。
+
+2)トランザクションログサイズは適切に設定する必要があるため(※1)、デフォルト値(5MB)を使用せずに変更する。(グループ数は変更しない。)
+MySQL導入時点ではそのままにしておき、wordpressを導入した後に必要サイズの見積を行い設定変更を行う。
+(wordpressでブログをアップした時の処理時間(IO)や、DBをクラッシュさせた後のリカバリ時間を計ってみる？)
+
+※1 小さいとIOが多くなり、大きいとダーティバッファが多いためリカバリ処理に影響する。
+
+3)MySQLver8.0を導入しているため、平行性の調整は行わない。
+  (MySQL5.0や5.1ではバッファプールミューテックス下のキューに格納されサーバの身動きがとれなくなることがあり、平行性を制限する必要のあるケースがあった。(処理対象が競合して動かなくなる？))
+
+4)時間のかかるクエリ処理を特定するために、クエリログは記録するようにする。
+ (特定のクエリが遅かった場合通常はSQL文自体の改善・索引作成から確認するところ、今回はwordpress側でsql文を作成するため設定の見直しが必要になる可能性がある。)
+ 
+ 関連オプション：general_log,general_log_file
+
+5)wordpressでブログ記事を投稿する際に絵文字が含まれる可能性があるため、utf8mb4を使用するように設定を行う。
+
+　関連オプション：character-set-server,collation-server
+
+6)古いバイナリログをサイクル削除する。(少なくとも7~14日分。)
+
+　関連オプション：expire_logs_days
+
+7)テキストに、送受信パケットの大きさは16MB程度にするよう記載あり。(レプリケーションを行うため、送受信パケットの許容サイズが小さいと必要なデータを取得できなくなる可能性がある。)MySQL8.0のデフォルトを確認したら64MBだったため、そのままにする。
+
+　関連オプション：max_allowed_packet
+
+8)DNSルックアップは無効にする。(有効だとホスト名検証のためサーバ側で正引、逆引を行う必要があり、DNSで問題が生じた際に接続がタイムアウトになる懸念があるため。)
+
+　関連オプション：skip_name_resolve
+
+9)SYSDATE関数の振る舞いは確定させる。
+(sysdateをnowのエイリアスにする。)
+ ※不確定だとレプリケーションがうまくいかなくなるらしい、、(理由について別途確認中)
+ 
+　関連オプション：sysdate_is_now
+
+10)レプリカはマスタからの変更のみを受け付ける。
+
+　関連オプション：read_only
+
+11)自動レプリケーションは無効にする。(クラッシュ後にレプリケーションしたら危険なので、、)
+
+　関連オプション：skip_slave_start
+
+12)テキストにマスターへの接続に失敗し、レプリカ側で再接続が必要であることを認識する時間は1分にするよう記載あり。(MySQL5.xのデフォルト：1時間)
+MySQL8.0のデフォルトは1分のため、デフォルト値を設定。
+
+　関連オプション：slave_net_timeout
+
+13)メモリ内一時テーブルのサイズはテキストと同じ32MBにしておく。
+   wordpressを稼働させ、作成される一時テーブルの数が少なければもっと増やすなど行う。
+
+　関連オプション：tmp_table_size,max_heap_table_size
+                →同じ値を設定する。
+
+
+参考：
+　実践ハイパフォーマンスMysql(8章) 360ページ
+
+参考サイト(実践ハイパフォーマンスMysql(8章)を読むうえで調べたサイト)：
+[O_DIRECTで遊ぶ - takkan_mのNo planな日常](https://takkan-m.hatenadiary.org/entry/20071008/1191850035)
+
+→O_DIRECTはOSキャッシュを無視することができる。
+ DBのバッファでもキャッシュする場合にOSでもキャッシュすると二重でキャッシュすることになるのでリソースの無駄遣いを防ぐ。
+
+[�v���y�A�h�X�e�[�g�����g�iprepared statement�j�Ƃ� - IT�p�ꎫ�T e-Words](https://e-words.jp/w/%E3%83%97%E3%83%AA%E3%83%9A%E3%82%A2%E3%83%89%E3%82%B9%E3%83%86%E3%83%BC%E3%83%88%E3%83%A1%E3%83%B3%E3%83%88.html)
+
+→バインド機構とほぼ同義？
+
+ファイルディスクリプタについて
+[�t�@�C���f�B�X�N���v�^�ifile descriptor�j�Ƃ� - IT�p�ꎫ�T e-Words](https://e-words.jp/w/%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB%E3%83%87%E3%82%A3%E3%82%B9%E3%82%AF%E3%83%AA%E3%83%97%E3%82%BF.html)
+
+設定サンプル
+実践ハイパフォーマンスMysql(8章) 359ページ
+
+◆実作業内容
+
+1)ログ出力設定
+mysql> SHOW VARIABLES LIKE 'general_log';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| general_log   | OFF   |
++---------------+-------+
+1 row in set (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'general_log_file';
++------------------+------------------------------+
+| Variable_name    | Value                        |
++------------------+------------------------------+
+| general_log_file | /var/lib/mysql/localhost.log |
++------------------+------------------------------+
+1 row in set (0.00 sec)
+
+→general_logを有効化し、ログファイル名をわかりやすいものに修正
+
+[admin@localhost etc]$ sudo sed -i '11i general_log=1\ngeneral_log_file=/var/log/mysql/general-query.log' my.cnf
+
+→/etc/my.cnfに以下の通り追記
+
+[mysqld]
+～
+general_log=1
+general_log_file=/var/log/mysql/general-query.log
+
+[admin@localhost etc]$ diff my.cnf my.cnt_bk
+11,12d10
+< general_log=1
+< general_log_file=/var/log/mysql/general-query.log
+
+→事前に取得したbkファイルとdiffを取得し、想定外の差分が出ていないことを確認。
+
+
+2)キャラクタ、照合順序設定
+
+mysql> SELECT @@character_set_database, @@collation_database;
++--------------------------+----------------------+
+| @@character_set_database | @@collation_database |
++--------------------------+----------------------+
+| utf8mb4                  | utf8mb4_0900_ai_ci   |
++--------------------------+----------------------+
+1 row in set (0.00 sec)
+
+照合順序について、以下の通り違いがある。(★が違う箇所)
+
+utf8mb4_0900_ai_ci
+大文字と小文字は区別される★
+全角と半角は区別される
+平仮名と片仮名は区別される
+濁点の有無は区別される
+
+※0900はUnicodeのバージョン 9.00
+
+utf8mb4_general_ci
+大文字と小文字は区別されない★
+全角と半角は区別される
+平仮名と片仮名は区別される
+濁点の有無は区別される
+
+→ソートの性格さおよび処理性能の観点(※2)からMySQL8.0もデフォルトを使用。
+ ※2 秒あたりのスループット(トランザクション数)が1.3倍
+
+懸念：測定について、MySQL8.0(utf8mb4_0900_ai_ci)とMySQL5.7(utf8mb4_general_ci)のスループットで比較を行っているため、同じバージョンで測定したほうがよい？
+
+[MySQL – COLLATE～照合順序 – TauStation](http://taustation.com/mysql-collate/#utf8mb4_0900_ai_ci)
+
+[CharsetとCollationの設定がMySQLのパフォーマンスに与える影響 \| Yakst](https://yakst.com/ja/posts/5431)
+
+[admin@localhost etc]$ sudo sed -i '13i character-set-server=utf8mb4\ncollation-server=utf8mb4_0900_ai_ci' my.cnf
+
+→/etc/my.cnfに以下を追記(デフォルト値だが、一応明示的に指定)
+
+[mysqld]
+・character-set-server=utf8mb4
+ (wordpressを導入するため、ブログ記事用にutf8mb4を指定)
+ 
+・collation-server=utf8mb4_0900_ai_ci
+ (ソート・条件式の大小比較における文字列の取り扱いに関する指定。
+ utf8mb4で、言語は様々で、大文字小文字は区別しない。と設定)
+
+[admin@localhost etc]$ diff my.cnf my.cnt_bk
+11,14d10
+< general_log=1
+< general_log_file=/var/log/mysql/general-query.log
+< character-set-server=utf8mb4
+< collation-server=utf8mb4_0900_ai_ci
+
+→想定外の差分が出ていないことを確認
+
+
+3)トランザクションログのサイクル設定
+
+mysql> SHOW VARIABLES LIKE 'expire_logs_days';
++------------------+-------+
+| Variable_name    | Value |
++------------------+-------+
+| expire_logs_days | 0     |
++------------------+-------+
+1 row in set (0.00 sec)
+
+→ログがたまり続けるため設定を変更
+
+[admin@localhost etc]$ sudo sed -i '15i expire_logs_days=7' my.cnf
+
+→/etc/my.cnfに以下を追記
+
+[mysqld]
+expire_logs_days=7
+
+[admin@localhost etc]$ diff my.cnf my.cnt_bk
+11,15d10
+< general_log=1
+< general_log_file=/var/log/mysql/general-query.log
+< character-set-server=utf8mb4
+< collation-server=utf8mb4_0900_ai_ci
+< expire_logs_days=7
+
+4)送受信パケットサイズ設定
+
+mysql> SHOW VARIABLES LIKE 'max_allowed_packet';
++--------------------+----------+
+| Variable_name      | Value    |
++--------------------+----------+
+| max_allowed_packet | 67108864 |
++--------------------+----------+
+1 row in set (0.00 sec)
+
+mysql> select 67108864/1024/1024 as MB from dual;
++-------------+
+| MB          |
++-------------+
+| 64.00000000 |
++-------------+
+1 row in set (0.00 sec)
+
+→デフォルトで64MB確保されているため、この値をそのまま採用
+(バージョンアップ時に後方互換性の問題が生じないと考え、明示的な指定もしない。
+　※デフォルト値が増えた場合でも問題なく動作するため。)
+
+
+5)DNSルックアップ無効化
+
+mysql> SHOW VARIABLES LIKE 'skip_name_resolve';
++-------------------+-------+
+| Variable_name     | Value |
++-------------------+-------+
+| skip_name_resolve | OFF   |
++-------------------+-------+
+1 row in set (0.00 sec)
+
+→OFFになっていることを確認
+
+[admin@localhost etc]$ sudo sed -i '16i skip_name_resolve=1' my.cnf
+
+→/etc/my.cnfに以下を追記
+
+[mysqld]
+skip_name_resolve=1
+
+[admin@localhost etc]$ diff my.cnf my.cnt_bk
+11,16d10
+< general_log=1
+< general_log_file=/var/log/mysql/general-query.log
+< character-set-server=utf8mb4
+< collation-server=utf8mb4_0900_ai_ci
+< expire_logs_days=7
+< skip_name_resolve=1
+
+→想定外の差分が出ていないことを確認
+
+6)sysdate_is_now有効化
+
+mysql> SHOW VARIABLES LIKE 'sysdate*';
+Empty set (0.00 sec)
+
+→何も設定されていない？
+
+[admin@localhost etc]$ sudo sed -i '17i sysdate_is_now=1' my.cnf
+
+→/etc/my.cnfに以下を追記
+
+[mysqld]
+sysdate_is_now=1
+
+[admin@localhost etc]$ diff my.cnf my.cnt_bk
+11,17d10
+< general_log=1
+< general_log_file=/var/log/mysql/general-query.log
+< character-set-server=utf8mb4
+< collation-server=utf8mb4_0900_ai_ci
+< expire_logs_days=7
+< skip_name_resolve=1
+< sysdate_is_now=1
+
+→想定外の差分が出ていないことを確認
+
+7)レプリカがマスタからの変更のみを受け付けるよう設定
+
+mysql> SHOW VARIABLES LIKE 'read_only';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| read_only     | OFF   |
++---------------+-------+
+1 row in set (0.00 sec)
+
+→OFFになっているため有効化
+
+[admin@localhost etc]$ sudo sed -i '18i read_only=1' my.cnf
+
+→/etc/my.cnfに以下を追記
+
+[mysqld]
+read_only=1
+
+[admin@localhost etc]$ diff my.cnf my.cnt_bk
+11,18d10
+< general_log=1
+< general_log_file=/var/log/mysql/general-query.log
+< character-set-server=utf8mb4
+< collation-server=utf8mb4_0900_ai_ci
+< expire_logs_days=7
+< skip_name_resolve=1
+< sysdate_is_now=1
+< read_only=1
+
+→想定外の差分が出ていないことを確認。
+
+8)起動時の自動レプリケーションを無効化。
+
+mysql> SHOW VARIABLES LIKE 'skip_slave_start';
++------------------+-------+
+| Variable_name    | Value |
++------------------+-------+
+| skip_slave_start | OFF   |
++------------------+-------+
+1 row in set (0.00 sec)
+
+→OFF(起動時に自動同期をスキップしない。)になっているため有効化
+
+[admin@localhost etc]$ sudo sed -i '19i skip_slave_start=1' my.cnf
+
+→/etc/my.cnfに以下を追記
+
+[mysqld]
+skip_slave_start=1
+
+[admin@localhost etc]$ diff my.cnf my.cnt_bk
+11,19d10
+< general_log=1
+< general_log_file=/var/log/mysql/general-query.log
+< character-set-server=utf8mb4
+< collation-server=utf8mb4_0900_ai_ci
+< expire_logs_days=7
+< skip_name_resolve=1
+< sysdate_is_now=1
+< read_only=1
+< skip_slave_start=1
+
+→想定外の差分が出ていないことを確認
+
+9)レプリカ→マスタの再接続時定
+
+mysql> SHOW VARIABLES LIKE 'slave_net_timeout';
++-------------------+-------+
+| Variable_name     | Value |
++-------------------+-------+
+| slave_net_timeout | 60    |
++-------------------+-------+
+1 row in set (0.00 sec)
+
+→デフォルトで60秒(1分)で設定されているため、この値をそのまま採用
+(バージョンアップ時に後方互換性の問題が生じないと考え、明示的な指定もしない。)
+
+10)一時テーブルのサイズを変更
+
+●tmp_table_size
+mysql> SHOW VARIABLES LIKE 'tmp_table_size';
++----------------+----------+
+| Variable_name  | Value    |
++----------------+----------+
+| tmp_table_size | 16777216 |
++----------------+----------+
+1 row in set (0.00 sec)
+
+mysql> select 16777216/1024/1024 as MB from dual;
++-------------+
+| MB          |
++-------------+
+| 16.00000000 |
++-------------+
+1 row in set (0.00 sec)
+
+●max_heap_table_size(メモリテーブルの最大増加許容サイズ)
+mysql> SHOW VARIABLES LIKE 'max_heap_table_size';
++---------------------+----------+
+| Variable_name       | Value    |
++---------------------+----------+
+| max_heap_table_size | 16777216 |
++---------------------+----------+
+1 row in set (0.00 sec)
+
+mysql> select 16777216/1024/1024 as MB from dual;
++-------------+
+| MB          |
++-------------+
+| 16.00000000 |
++-------------+
+1 row in set (0.00 sec)
+
+→デフォルトで16MBなので32MBに変更
+
+[admin@localhost etc]$ sudo sed -i '20i tmp_table_size=32MB\nmax_heap_table_size=32MB' my.cnf
+
+→/etc/my.cnfに以下を追記
+
+[mysqld]
+tmp_table_size=32MB
+max_heap_table_size=32MB
+
+[admin@localhost etc]$ diff my.cnf my.cnt_bk
+11,21d10
+< general_log=1
+< general_log_file=/var/log/mysql/general-query.log
+< character-set-server=utf8mb4
+< collation-server=utf8mb4_0900_ai_ci
+< expire_logs_days=7
+< skip_name_resolve=1
+< sysdate_is_now=1
+< read_only=1
+< skip_slave_start=1
+< tmp_table_size=32MB
+< max_heap_table_size=32MB
+
+[admin@localhost etc]$ sudo systemctl stop mysqld
+[admin@localhost etc]$ sudo systemctl status mysqld
+● mysqld.service - LSB: start and stop MySQL
+   Loaded: loaded (/etc/rc.d/init.d/mysqld; bad; vendor preset: disabled)
+   Active: inactive (dead) since 水 2022-01-12 16:25:59 JST; 9s ago
+[admin@localhost etc]$ sudo systemctl start mysqld
+[admin@localhost etc]$ sudo systemctl status mysqld
+● mysqld.service - LSB: start and stop MySQL
+   Loaded: loaded (/etc/rc.d/init.d/mysqld; bad; vendor preset: disabled)
+   Active: active (running) since 水 2022-01-12 16:26:34 JST; 2s ago
+
+→サービスを再起動(restartでよかった、、、)
+
+mysql> SHOW VARIABLES LIKE 'general_log';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| general_log   | ON    |
++---------------+-------+
+1 row in set (0.02 sec)
+
+mysql> SHOW VARIABLES LIKE 'general_log_file';
++------------------+----------------------------------+
+| Variable_name    | Value                            |
++------------------+----------------------------------+
+| general_log_file | /var/log/mysql/general-query.log |
++------------------+----------------------------------+
+1 row in set (0.00 sec)
+
+mysql> SELECT @@character_set_database, @@collation_database;
++--------------------------+----------------------+
+| @@character_set_database | @@collation_database |
++--------------------------+----------------------+
+| utf8mb4                  | utf8mb4_0900_ai_ci   |
++--------------------------+----------------------+
+1 row in set (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'expire_logs_days';
++------------------+-------+
+| Variable_name    | Value |
++------------------+-------+
+| expire_logs_days | 7     |
++------------------+-------+
+1 row in set (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'max_allowed_packet';
++--------------------+----------+
+| Variable_name      | Value    |
++--------------------+----------+
+| max_allowed_packet | 67108864 |
++--------------------+----------+
+1 row in set (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'skip_name_resolve';
++-------------------+-------+
+| Variable_name     | Value |
++-------------------+-------+
+| skip_name_resolve | ON    |
++-------------------+-------+
+1 row in set (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'sysdate*';
+Empty set (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'read_only';
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| read_only     | ON    |
++---------------+-------+
+1 row in set (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'skip_slave_start';
++------------------+-------+
+| Variable_name    | Value |
++------------------+-------+
+| skip_slave_start | ON    |
++------------------+-------+
+1 row in set (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'slave_net_timeout';
++-------------------+-------+
+| Variable_name     | Value |
++-------------------+-------+
+| slave_net_timeout | 60    |
++-------------------+-------+
+1 row in set (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'tmp_table_size';
++----------------+----------+
+| Variable_name  | Value    |
++----------------+----------+
+| tmp_table_size | 33554432 |
++----------------+----------+
+1 row in set (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'max_heap_table_size';
++---------------------+----------+
+| Variable_name       | Value    |
++---------------------+----------+
+| max_heap_table_size | 33554432 |
++---------------------+----------+
+1 row in set (0.00 sec)
+
+→結果を確認。sysdate_is_now以外結果が期待値通りであることを確認。
+
+mysql> SHOW GLOVAL VARIABLES LIKE 'sysdate*';
+Empty set (0.00 sec)
+
+→glovalをつけてもまだ表示されない。
+
+mysql> select now(),sysdate() from dual;
++---------------------+---------------------+
+| now()               | sysdate()           |
++---------------------+---------------------+
+| 2022-01-12 16:42:21 | 2022-01-12 16:42:21 |
++---------------------+---------------------+
+1 row in set (0.00 sec)
+
+→値が同じのためエイリアスされている、、？
+
+補足：
+SYSDATE()は関数が呼び出された瞬間の時刻
+NOW()はクエリ開始時
+
+◆設定あり
+mysql> SELECT SYSDATE(), SLEEP(10), SYSDATE();
++---------------------+-----------+---------------------+
+| SYSDATE()           | SLEEP(10) | SYSDATE()           |
++---------------------+-----------+---------------------+
+| 2022-01-12 18:00:58 |         0 | 2022-01-12 18:00:58 |
++---------------------+-----------+---------------------+
+1 row in set (10.00 sec)
+
+◆設定なし
+
+mysql> SELECT SYSDATE(), SLEEP(10), SYSDATE();
++---------------------+-----------+---------------------+
+| SYSDATE()           | SLEEP(10) | SYSDATE()           |
++---------------------+-----------+---------------------+
+| 2022-01-12 18:00:11 |         0 | 2022-01-12 18:00:21 |
++---------------------+-----------+---------------------+
+1 row in set (10.00 sec)
+
+→設定が問題なく反映されていることを確認。
