@@ -1,0 +1,399 @@
+[2022/1/13]研修タスクまとめ
+
+◆大枠
+1.本番RDSの設定確認
+2.レプリケーションの作成
+
+◆実作業内容
+
+1)ユーザ追加作業
+  mysql> create user mysql_admin identified by 'xxxxxxxx'
+
+→今までrootで作業していたので、別途作業用ユーザを登録。
+
+mysql> select count(*) from mysql.user where user='mysql_admin';
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+1 row in set (0.00 sec)
+
+→新たに作成されていることを確認。
+
+mysql> exit
+Bye
+
+[admin@localhost ~]$ mysql -u mysql_admin -p
+Enter password:
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+
+→ログインできることを確認
+
+2)[事前作業]レプリケーションを行うデータベースを作成
+
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
++--------------------+
+4 rows in set (0.00 sec)
+
+→データベース一覧を出力
+
+[admin@localhost download]$ sudo curl -LO https://downloads.mysql.com/docs/world-db.tar.gz
+
+[admin@localhost download]$ sudo tar xzfv world-db.tar.gz
+
+→サンプルデータベースをダウンロード
+
+mysql> source /home/admin/download/world-db/world.sql
+
+→サンプルデータベース作成用SQLを実行
+
+mysql> show databases
+    -> ;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
+| world              |
++--------------------+
+5 rows in set (0.00 sec)
+
+→データベースの作成確認
+
+mysql> use world
+Database changed
+
+→作成したデータベースに接続
+
+mysql> show tables;
++-----------------+
+| Tables_in_world |
++-----------------+
+| city            |
+| country         |
+| countrylanguage |
++-----------------+
+3 rows in set (0.00 sec)
+
+テーブルの一覧を確認
+
+3)[事前作業]前提事項の確認
+
+[admin@localhost etc]$ less -N my.cnf
+[admin@localhost etc]$ sudo sed -i '22i log_bin=/var/log/mysql/bin.log\nlog_bin_index=/var/log/mysql/bin.list\nmax_binlog_size=128M' my.cnf
+
+[admin@localhost etc]$ sudo systemctl restart mysqld
+[admin@localhost etc]$ sudo systemctl status mysqld
+● mysqld.service - LSB: start and stop MySQL
+   Loaded: loaded (/etc/rc.d/init.d/mysqld; bad; vendor preset: disabled)
+   Active: active (running) since 木 2022-01-13 14:26:29 JST; 6s ago
+
+→バイナリログの設定が漏れていたので、設定。
+ ディレクトリはbin.logとファイル名のインデックスファイルは/var/log/mysqlに配置。
+ 
+ mysql> show binary logs;
++------------+-----------+-----------+
+| Log_name   | File_size | Encrypted |
++------------+-----------+-----------+
+| bin.000001 |       156 | No        |
++------------+-----------+-----------+
+1 row in set (0.00 sec)
+
+
+[admin@localhost etc]$ sudo ls /var/log/mysql/bin.*
+/var/log/mysql/bin.000001  /var/log/mysql/bin.list
+
+[admin@localhost etc]$ sudo less /var/log/mysql/bin.list
+/var/log/mysql/bin.000001
+
+→設定通りにバイナリログが認識されていることを確認
+
+★マスタ
+[admin@localhost etc]$ sudo sed -i '25i server-id=1' my.cnf
+
+★スレーブ
+[admin@localhost etc]$ sudo sed -i '25i server-id=2' my.cnf
+
+→マスタとスレーブで一意のidを設定
+
+★マスタ
+[admin@localhost etc]$ sudo sed -i '26i innodb_flush_log_at_trx_commit=1\nsync_binlog=1' my.cnf
+
+→MySQLページにて、持続性・一貫性を高めるため、マスタに以下設定を追加するよう記載あり。
+innodb_flush_log_at_trx_commit=1：コミット都度バイナリログに書き込みを行う。
+sync_binlog=1：ログとディスクの同期をどのくらい続けるか。(単位：ミリ秒)
+               →すべてのトランザクションがコミットされる前にバイナリログに同期される。
+バイナリログからロストするトランザクションがないことを保証するためスレーブとの一貫性が高い？）
+
+[MySQL :: MySQL 5.6 リファレンスマニュアル :: 17.1.1.1 レプリケーションマスター構成の設定](https://dev.mysql.com/doc/refman/5.6/ja/replication-howto-masterbaseconfig.html)
+[MySQL 5.7.7におけるレプリケーションのデフォルト値(MySQL High Availabilityより) \| Yakst](https://yakst.com/ja/posts/2698)
+
+★スレーブ
+-
+(スレーブのバイナリログは必要ないが無効にする必要もないため、このまま有効化しておく。
+[MySQL :: MySQL 5.6 リファレンスマニュアル :: 17.1.1.2 レプリケーションスレーブ構成の設定](https://dev.mysql.com/doc/refman/5.6/ja/replication-howto-slavebaseconfig.html)
+
+★マスター
+mysql> CREATE USER 'mysql_slave'@'192.168.56.103' IDENTIFIED BY 'xxxxxxxxxx';
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> GRANT REPLICATION SLAVE ON *.* TO 'mysql_slave'@'192.168.56.103';
+
+→スレーブ用にユーザ作成
+
+mysql> FLUSH TABLES WITH READ LOCK;
+Query OK, 0 rows affected (0.00 sec)
+
+→テーブルをロックする。(静止点)
+
+[admin@localhost ~]$ mysqldump -u root --all-databases --master-data=2 > all_dbdump.db -p
+
+→dumpファイルを取得。(スレーブにimportする用)
+-master-data=2をつけてbinlogの場所などスレーブ設定に必要な情報をいれる。
+(-master-data=1はCHANGE MASTER TOがコメントアウトされていない。2はコメントアウトされている。)
+
+[mysqldumpでバックアップをする時につけるオプション - oinume journal](https://journal.lampetty.net/entry/wp/292)
+
+CHANGE MASTER TOとは、、、
+レプリカサーバーがソースへの接続およびソースからのデータの読取りに使用するパラメータを変更する。
+[MySQL :: MySQL 8.0 リファレンスマニュアル :: 13.4.2.1 CHANGE MASTER TO ステートメント](https://dev.mysql.com/doc/refman/8.0/ja/change-master-to.html)
+
+
+
+★スレーブ
+[admin@localhost ~]$ scp admin@192.168.56.102:/home/admin/all_dbdump.db ~/
+[admin@localhost ~]$ ls -l all*
+-rw-rw-r--. 1 admin admin 1461481  1月 13 16:06 all_dbdump.db
+
+
+→マスタで作成したdumpファイルをスレーブにコピー
+[admin@localhost ~]$ mysql < all_dbdump.db -u mysql_admin -p
+Enter password:
+ERROR 1064 (42000) at line 1: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'WARNING: --master-data is deprecated and will be removed in a future version. Us' at line 1
+
+→--master-dataが非推奨なのでエラーに、、、
+
+[admin@localhost ~]$ mysqldump -u root --all-databases > all_dbdump.db -p
+
+→再度dump取得
+
+[admin@localhost ~]$ scp admin@192.168.56.102:/home/admin/all_dbdump.db ~/
+
+[admin@localhost ~]$ ls -l all*
+-rw-rw-r--. 1 admin admin 1461234  1月 13 16:20 all_dbdump.db
+
+→ファイル転送
+
+[admin@localhost ~]$ mysql < all_dbdump.db -u root -p
+
+→dmpfileを取り込み。
+
+mysql> show databases
+    -> ;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
+| world              |
++--------------------+
+5 rows in set (0.00 sec)
+
+→取り込めていることを確認。(worldが追加されている。)
+
+mysql> CHANGE MASTER TO
+    -> MASTER_HOST='192.168.56.102',
+    -> MASTER_USER='mysql_slave',
+    -> MASTER_PASSWORD='slavepass',
+    -> MASTER_LOG_FILE='bin.000003',
+    -> MASTER_LOG_POS=729;
+Query OK, 0 rows affected, 8 warnings (0.03 sec)
+
+mysql> SHOW WARNINGS;
+～
+
+→実行した分はMySQL8.0で非推奨のため、推奨されている文で再度実行
+またSSL/TLSの設定も追加する。
+(CHANGE REPLICATION SOURCE TO文を使用する。)
+
+mysql> RESET REPLICA
+    -> ;
+Query OK, 0 rows affected (0.02 sec)
+
+→設定をクリアする。
+
+実行SQL：
+CHANGE REPLICATION SOURCE TO
+SOURCE_HOST='192.168.56.102',
+SOURCE_LOG_FILE='bin.000003',
+SOURCE_LOG_POS=729,
+SOURCE_SSL=1;
+
+メモ
+SOURCE_USER='mysql_slave',
+SOURCE_PASSWORD='slavepass',
+
+mysql> CHANGE REPLICATION SOURCE TO
+    -> SOURCE_HOST='192.168.56.102',
+    -> SOURCE_LOG_FILE='bin.000003',
+    -> SOURCE_LOG_POS=729,
+    -> SOURCE_SSL=1;
+Query OK, 0 rows affected (0.04 sec)
+
+mysql> START REPLICA user='mysql_slave' password='xxxxxxxx';
+Query OK, 0 rows affected, 1 warning (0.02 sec)
+
+mysql> show warnings;
++-------+------+------------------------------------------------------------------------+
+| Level | Code | Message                                                                |
++-------+------+------------------------------------------------------------------------+
+| Note  | 1759 | Sending passwords in plain text without SSL/TLS is extremely insecure. |
++-------+------+------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+→sslの設定は後で行う。
+
+
+★マスタで実行
+mysql> GRANT ALL ON world.* to 'mysql_admin'@'%'
+    -> ;
+Query OK, 0 rows affected (0.01 sec)
+
+→mysql_adminユーザにworldデータベースのフル権限を設定
+
+mysql> use world;
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+
+→データベースに入る。
+
+mysql> show tables;
++-----------------+
+| Tables_in_world |
++-----------------+
+| city            |
+| country         |
+| countrylanguage |
++-----------------+
+3 rows in set (0.00 sec)
+
+mysql> select * from country where name= 'Japan';
++------+-------+-----------+--------------+-------------+-----------+------------+----------------+------------+------------+--------------+-------------------------+-------------+---------+-------+
+| Code | Name  | Continent | Region       | SurfaceArea | IndepYear | Population | LifeExpectancy | GNP        | GNPOld     | LocalName    | GovernmentForm          | HeadOfState | Capital | Code2 |
++------+-------+-----------+--------------+-------------+-----------+------------+----------------+------------+------------+--------------+-------------------------+-------------+---------+-------+
+| JPN  | Japan | Asia      | Eastern Asia |   377829.00 |      -660 |  126714000 |           80.7 | 3787042.00 | 4192638.00 | Nihon/Nippon | Constitutional Monarchy | Akihito     |    1532 | JP    |
++------+-------+-----------+--------------+-------------+-----------+------------+----------------+------------+------------+--------------+-------------------------+-------------+---------+-------+
+1 row in set (0.00 sec)
+
+mysql>  update country set Name = 'Nippon' where code= 'JPN';
+Query OK, 1 row affected (0.01 sec)
+Rows matched: 1  Changed: 1  Warnings: 0
+
+mysql> select * from country where code= 'JPN';
++------+-------+-----------+--------------+-------------+-----------+------------+----------------+------------+------------+--------------+-------------------------+-------------+---------+-------+
+| Code | Name  | Continent | Region       | SurfaceArea | IndepYear | Population | LifeExpectancy | GNP        | GNPOld     | LocalName    | GovernmentForm          | HeadOfState | Capital | Code2 |
++------+-------+-----------+--------------+-------------+-----------+------------+----------------+------------+------------+--------------+-------------------------+-------------+---------+-------+
+| JPN  | Nippon | Asia      | Eastern Asia |   377829.00 |      -660 |  126714000 |           80.7 | 3787042.00 | 4192638.00 | Nihon/Nippon | Constitutional Monarchy | Akihito     |    1532 | JP    |
++------+-------+-----------+--------------+-------------+-----------+------------+----------------+------------+------------+--------------+-------------------------+-------------+---------+-------+
+1 row in set (0.00 sec)
+
+→countryテーブルの、日本のレコードを更新
+Name「Japan」→「Nippon」
+
+
+★スレーブで実施
+mysql> GRANT ALL ON world.* to 'mysql_admin'@'%';
+Query OK, 0 rows affected (0.00 sec)
+
+→mysqladminにworldデータベースのフル権限設定。
+
+mysql> select * from country where code= 'JPN';
++------+-------+-----------+--------------+-------------+-----------+------------+----------------+------------+----------                                                                                                         --+--------------+-------------------------+-------------+---------+-------+
+| Code | Name  | Continent | Region       | SurfaceArea | IndepYear | Population | LifeExpectancy | GNP        | GNPOld                                                                                                              | LocalName    | GovernmentForm          | HeadOfState | Capital | Code2 |
++------+-------+-----------+--------------+-------------+-----------+------------+----------------+------------+----------                                                                                                         --+--------------+-------------------------+-------------+---------+-------+
+| JPN  | Japan | Asia      | Eastern Asia |   377829.00 |      -660 |  126714000 |           80.7 | 3787042.00 | 4192638.0                                                                                                         0 | Nihon/Nippon | Constitutional Monarchy | Akihito     |    1532 | JP    |
++------+-------+-----------+--------------+-------------+-----------+------------+----------------+------------+----------                                                                                                         --+--------------+-------------------------+-------------+---------+-------+
+1 row in set (0.00 sec)
+
+→同期されていないことを確認。
+
+mysql> SHOW REPLICA STATUS\G;
+～
+Last_IO_Error: Fatal error: The slave I/O thread stops because master and slave have equal MySQL server UUIDs; these UUIDs must be different for replication to work.
+
+レプリカのステータスを確認。
+マスタとスレーブのUUIDが同じだめエラー(マスタをクローンしたため出たエラー。)
+
+[admin@localhost etc]$ sudo ls -l /var/lib/mysql/auto.cnf
+4 -rw-r-----. 1 mysql mysql 56  1月 11 10:36 /var/lib/mysql/auto.cnf
+[admin@localhost etc]$ sudo less /var/lib/mysql/auto.cnf
+[admin@localhost etc]$ sudo rm -rf /var/lib/mysql/auto.cnf
+
+→見つからなかった場合は別の値で再作成されるため、削除
+
+[admin@localhost etc]$ sudo reboot
+
+[admin@localhost ~]$ sudo ls -l /var/lib/mysql/auto.cnf
+-rw-r-----. 1 mysql mysql 56  1月 13 18:16 /var/lib/mysql/auto.cnf
+
+→再作成されていることを確認。
+
+mysql> SHOW REPLICA STATUS\G;
+～
+           Replica_IO_Running: No
+          Replica_SQL_Running: No
+
+→停止していることを確認。
+
+mysql> START REPLICA user='mysql_slave' password='xxxxxxxx';
+
+→レプリケーションを再開。
+
+mysql> use world
+mysql> select * from country where code= 'JPN';
++------+--------+-----------+--------------+-------------+-----------+------------+----------------+------------+------------+--------------+-------------------------+-------------+---------+-------+
+| Code | Name   | Continent | Region       | SurfaceArea | IndepYear | Population | LifeExpectancy | GNP        | GNPOld     | LocalName    | GovernmentForm          | HeadOfState | Capital | Code2 |
++------+--------+-----------+--------------+-------------+-----------+------------+----------------+------------+------------+--------------+-------------------------+-------------+---------+-------+
+| JPN  | Nippon | Asia      | Eastern Asia |   377829.00 |      -660 |  126714000 |           80.7 | 3787042.00 | 4192638.00 | Nihon/Nippon | Constitutional Monarchy | Akihito     |    1532 | JP    |
++------+--------+-----------+--------------+-------------+-----------+------------+----------------+------------+------------+--------------+-------------------------+-------------+---------+-------+
+1 row in set (0.00 sec)
+
+→NameがNipponに更新されていることを確認。
+
+mysql> SHOW REPLICA STATUS\G;
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+
+→レプリケーションが問題なく稼働していることを確認。
+
+
+◆追加で確認すること。
+
+事前に現在のstatusを出力する。
+show_master_status >text
+show_slave_status >text
+
+tableにinsertを実行
+
+再度statusの出力を行う。
+show_master_status >text
+show_slave_status >text
+
+insert前後でstatusの比較を行う。
+
+レプリカにインサートしてバイナリログで復旧する手順を検証する。
+(事前にバックアップ取得をして簡単に復旧できるようにする。)
