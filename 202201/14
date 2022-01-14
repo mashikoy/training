@@ -1,0 +1,908 @@
+[2022/1/14]研修タスクまとめ
+
+◆大枠
+1.insert前後でshow_master_statusとshow_slave_statusの結果を比較
+2.レプリカを破壊して再作成を行う。
+  ※作業前に仮想サーバのバックアップを行う。
+    (念のため復旧できるかも確認。)
+
+◆実作業手順
+
+★マスタで実行(insert前)
+  mysql> show master status\G
+  *************************** 1. row ***************************
+               File: bin.000013
+           Position: 156
+       Binlog_Do_DB:
+   Binlog_Ignore_DB:
+  Executed_Gtid_Set:
+  1 row in set (0.00 sec)
+
+★レプリカで実行(insert前)
+mysql> show replica status\G
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 192.168.56.102
+                  Source_User: mysql_slave
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: bin.000013
+          Read_Source_Log_Pos: 156
+               Relay_Log_File: localhost-relay-bin.000023
+                Relay_Log_Pos: 359
+        Relay_Source_Log_File: bin.000013
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 156
+              Relay_Log_Space: 775
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: Yes
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 1
+                  Source_UUID: f2483126-727e-11ec-9585-080027855f4e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set:
+            Executed_Gtid_Set:
+                Auto_Position: 0
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+
+★マスタで実行
+mysql> select * from countrylanguage where CountryCode = 'JPN';
++-------------+----------------------+------------+------------+
+| CountryCode | Language             | IsOfficial | Percentage |
++-------------+----------------------+------------+------------+
+| JPN         | Ainu                 | F          |        0.0 |
+| JPN         | Chinese              | F          |        0.2 |
+| JPN         | English              | F          |        0.1 |
+| JPN         | Japanese             | T          |       99.1 |
+| JPN         | Korean               | F          |        0.5 |
+| JPN         | Philippene Languages | F          |        0.1 |
++-------------+----------------------+------------+------------+
+6 rows in set (0.00 sec)
+
+mysql> insert into countrylanguage values ('JPN','Russian','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+mysql> select * from countrylanguage where CountryCode = 'JPN';
++-------------+----------------------+------------+------------+
+| CountryCode | Language             | IsOfficial | Percentage |
++-------------+----------------------+------------+------------+
+| JPN         | Ainu                 | F          |        0.0 |
+| JPN         | Chinese              | F          |        0.2 |
+| JPN         | English              | F          |        0.1 |
+| JPN         | Japanese             | T          |       99.1 |
+| JPN         | Korean               | F          |        0.5 |
+| JPN         | Philippene Languages | F          |        0.1 |
+| JPN         | Russian              | F          |        0.0 |
++-------------+----------------------+------------+------------+
+7 rows in set (0.00 sec)
+
+→JPNにRussianを追加
+
+★マスタで実行(insert後)
+mysql> show master status\G
+*************************** 1. row ***************************
+             File: bin.000013
+         Position: 472
+     Binlog_Do_DB:
+ Binlog_Ignore_DB:
+Executed_Gtid_Set:
+1 row in set (0.00 sec)
+
+★レプリカで実行(insert後)
+mysql> show replica status\G
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 192.168.56.102
+                  Source_User: mysql_slave
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: bin.000013
+          Read_Source_Log_Pos: 472
+               Relay_Log_File: localhost-relay-bin.000023
+                Relay_Log_Pos: 675
+        Relay_Source_Log_File: bin.000013
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 472
+              Relay_Log_Space: 1091
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: Yes
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 1
+                  Source_UUID: f2483126-727e-11ec-9585-080027855f4e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set:
+            Executed_Gtid_Set:
+                Auto_Position: 0
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+★レプリカで実行(ついでにレプリケーションされていることを確認)
+
+mysql> select * from countrylanguage where CountryCode = 'JPN';
++-------------+----------------------+------------+------------+
+| CountryCode | Language             | IsOfficial | Percentage |
++-------------+----------------------+------------+------------+
+| JPN         | Ainu                 | F          |        0.0 |
+| JPN         | Chinese              | F          |        0.2 |
+| JPN         | English              | F          |        0.1 |
+| JPN         | Japanese             | T          |       99.1 |
+| JPN         | Korean               | F          |        0.5 |
+| JPN         | Philippene Languages | F          |        0.1 |
+| JPN         | Russian              | F          |        0.0 |
++-------------+----------------------+------------+------------+
+7 rows in set (0.00 sec)
+
+→「Language」が「Russian」の行が追加されていることを確認
+
+
+・insert前後の相違について
+
+★master
+
+[admin@localhost ~]$ diff master_after_insert.txt master_before_insert.txt
+4c4
+<          Position: 472
+---
+>          Position: 156
+
+→バイナリログの書き込み位置が更新されている。
+　156→ 472(差：316)
+
+
+★replica
+
+[admin@localhost ~]$ diff replica_before_insert.txt replica_after_insert.txt
+9c9
+<           Read_Source_Log_Pos: 156
+---
+>           Read_Source_Log_Pos: 472
+11c11
+<                 Relay_Log_Pos: 359
+---
+>                 Relay_Log_Pos: 675
+24,25c24,25
+<           Exec_Source_Log_Pos: 156
+<               Relay_Log_Space: 775
+---
+>           Exec_Source_Log_Pos: 472
+>               Relay_Log_Space: 1091
+
+読み込んだsource(マスタ)のバイナリログ位置が更新されている。(Read_Source_Log_Pos)
+156→ 472
+
+実行したバイナリログの位置も更新されている。(Exec_Source_Log_Pos)
+156→ 472
+
+Relay_Log_Posの値が更新されている。
+359→675
+
+Relay_Log_Spaceが更新されている。
+775→1091
+
+リレーログとは、、、
+マスターの更新をスレーブに適用する際、マスタのバイナリログをスレーブI/Oスレッドが受けとり
+そのままスレーブに適用するのではなく一度リレーログに書き込みを行う。
+SQLスレッドがリレーログから更新情報を読み取りレプリカに適用する。
+
+参考サイト：
+[第53回　リレーログファイルについて：MySQL道普請便り｜gihyo.jp … 技術評論社](https://gihyo.jp/dev/serial/01/mysql-road-construction-news/0053)
+
+Relay_Log_Posはリレーログファイル内の現在の位置。 
+Relay_Log_Spaceはリレーログファイルのサイズ
+
+
+・仮想サーバのバックアップ取得。
+
+仮想環境のMACアドレスはどうでもいいのでデフォルト。
+(仮想サーバ間で同じでなければ、、)
+
+フォーマット：
+virtualization format 1.0を選択
+(2.0はクラウド向けらしい、、、)
+
+参考サイト：
+[virtualbox — OVF-Version 0.9、1.0、2.0の違いは何ですか？](https://www.webdevqa.jp.net/ja/virtualbox/ovfversion-09%E3%80%8110%E3%80%8120%E3%81%AE%E9%81%95%E3%81%84%E3%81%AF%E4%BD%95%E3%81%A7%E3%81%99%E3%81%8B%EF%BC%9F/959066297/)
+
+マニフェストファイル：
+追加する。(パッケージ内のファイルの整合性を検証)
+
+参考サイト：
+<https://docs.citrix.com/ja-jp/citrix-hypervisor/vms/import-export.html#:~:text=%E3%83%9E%E3%83%8B%E3%83%95%E3%82%A7%E3%82%B9%E3%83%88%E3%81%A8%E3%81%AF%E3%80%81%E3%83%91%E3%83%83%E3%82%B1%E3%83%BC%E3%82%B8%E3%81%AB,%E3%81%93%E3%81%A8%E3%82%92%E8%A8%BC%E6%98%8E%E3%81%A7%E3%81%8D%E3%81%BE%E3%81%99%E3%80%82>
+
+ISOはいれない。
+
+・virtual boxにて、マスタとスレーブのそれぞれのエクスポートを実施。
+　およびスレーブサーバを削除してインポートできることを確認。
+  
+  [admin@localhost ~]$ ifconfig
+  ～
+  enp0s8: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.56.104  netmask 255.255.255.0  broadcast 192.168.56.255
+        inet6 fe80::3308:a000:4aac:4c0  prefixlen 64  scopeid 0x20<link>
+        ether 08:00:27:b2:ab:a5  txqueuelen 1000  (Ethernet)
+        RX packets 2  bytes 1180 (1.1 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 29  bytes 4690 (4.5 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+～
+
+→マスタとの接続に使用しているIPが以下の通り変更(インクリメントされていることを確認)
+
+192.168.56.103→192.168.56.104
+(DHCPで勝手に割り当てられているため、、、)
+
+★マスタ作業
+mysql> rename user mysql_slave@192.168.56.103 to mysql_slave@192.168.56.104;
+Query OK, 0 rows affected (0.01 sec)
+
+→レプリケーションに使用しているユーザのホストを修正
+
+mysql> select * from countrylanguage where CountryCode = 'JPN';
++-------------+----------------------+------------+------------+
+| CountryCode | Language             | IsOfficial | Percentage |
++-------------+----------------------+------------+------------+
+| JPN         | Ainu                 | F          |        0.0 |
+| JPN         | Chinese              | F          |        0.2 |
+| JPN         | English              | F          |        0.1 |
+| JPN         | Japanese             | T          |       99.1 |
+| JPN         | Korean               | F          |        0.5 |
+| JPN         | Philippene Languages | F          |        0.1 |
+| JPN         | Russian              | F          |        0.0 |
++-------------+----------------------+------------+------------+
+7 rows in set (0.00 sec)
+
+mysql> insert into countrylanguage values ('JPN','Spanish','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+mysql> select * from countrylanguage where CountryCode = 'JPN';
++-------------+----------------------+------------+------------+
+| CountryCode | Language             | IsOfficial | Percentage |
++-------------+----------------------+------------+------------+
+| JPN         | Ainu                 | F          |        0.0 |
+| JPN         | Chinese              | F          |        0.2 |
+| JPN         | English              | F          |        0.1 |
+| JPN         | Japanese             | T          |       99.1 |
+| JPN         | Korean               | F          |        0.5 |
+| JPN         | Philippene Languages | F          |        0.1 |
+| JPN         | Russian              | F          |        0.0 |
+| JPN         | Spanish              | F          |        0.0 |
++-------------+----------------------+------------+------------+
+8 rows in set (0.00 sec)
+
+→念のためレプリケーションされることを確認するためマスタのデータを更新。
+
+★スレーブ作業
+
+mysql> START REPLICA user='mysql_slave' password='xxxxxxxxxxxx';
+Query OK, 0 rows affected, 1 warning (0.04 sec)
+mysql> SHOW REPLICA STATUS\G
+～
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+～
+
+mysql> use world
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+mysql> select * from countrylanguage where CountryCode = 'JPN';
++-------------+----------------------+------------+------------+
+| CountryCode | Language             | IsOfficial | Percentage |
++-------------+----------------------+------------+------------+
+| JPN         | Ainu                 | F          |        0.0 |
+| JPN         | Chinese              | F          |        0.2 |
+| JPN         | English              | F          |        0.1 |
+| JPN         | Japanese             | T          |       99.1 |
+| JPN         | Korean               | F          |        0.5 |
+| JPN         | Philippene Languages | F          |        0.1 |
+| JPN         | Russian              | F          |        0.0 |
+| JPN         | Spanish              | F          |        0.0 |
++-------------+----------------------+------------+------------+
+8 rows in set (0.00 sec)
+
+→レプリケーションされていることを確認。(Spanishが存在。)
+
+
+◆レプリカの破壊と復旧
+(1)バックアップ(dbdmp)を作成する。
+(2)データベースを更新する。(10行くらいインサートする。)
+(3)レプリケーションされていることを確認する。
+(4)レプリカを破壊する。
+(5)復旧する。(バックアップファイルの適用でバイナリファイルでロールフォワードする。)
+
+
+(1)バックアップ
+[admin@localhost ~]$ mysqldump --all-databases > 20210114_db.dump -u root -p
+[admin@localhost ~]$ ls -ltr
+~
+-rw-rw-r--. 1 admin admin 1462734  1月 14 15:16 20210114_db.dump
+
+
+(2)データベースを更新する。
+
+★マスタで作業
+mysql> insert into countrylanguage values ('JPN','test1','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+mysql> insert into countrylanguage values ('JPN','test2','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+mysql> insert into countrylanguage values ('JPN','test3','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+mysql> insert into countrylanguage values ('JPN','test4','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+mysql> insert into countrylanguage values ('JPN','test5','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+mysql> insert into countrylanguage values ('JPN','test6','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+mysql> insert into countrylanguage values ('JPN','test7','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+mysql> insert into countrylanguage values ('JPN','test8','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+mysql> insert into countrylanguage values ('JPN','test9','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+mysql> insert into countrylanguage values ('JPN','test10','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+(3)レプリケーションされていることを確認する。
+
+★レプリカで作業
+mysql> select * from countrylanguage where  CountryCode='JPN';
++-------------+----------------------+------------+------------+
+| CountryCode | Language             | IsOfficial | Percentage |
++-------------+----------------------+------------+------------+
+| JPN         | Ainu                 | F          |        0.0 |
+| JPN         | Chinese              | F          |        0.2 |
+| JPN         | English              | F          |        0.1 |
+| JPN         | Japanese             | T          |       99.1 |
+| JPN         | Korean               | F          |        0.5 |
+| JPN         | Philippene Languages | F          |        0.1 |
+| JPN         | Russian              | F          |        0.0 |
+| JPN         | Spanish              | F          |        0.0 |
+| JPN         | test1                | F          |        0.0 |
+| JPN         | test10               | F          |        0.0 |
+| JPN         | test2                | F          |        0.0 |
+| JPN         | test3                | F          |        0.0 |
+| JPN         | test4                | F          |        0.0 |
+| JPN         | test5                | F          |        0.0 |
+| JPN         | test6                | F          |        0.0 |
+| JPN         | test7                | F          |        0.0 |
+| JPN         | test8                | F          |        0.0 |
+| JPN         | test9                | F          |        0.0 |
++-------------+----------------------+------------+------------+
+18 rows in set (0.00 sec)
+
+→データが更新されていることを確認
+
+(4)データベース(world)を破壊する。
+
+★レプリカ(root)で作業
+[root@localhost mysql]# cd world/
+[root@localhost world]# pwd
+/var/lib/mysql/world
+
+[root@localhost world]# ls -ltr
+合計 1072
+-rw-r-----. 1 mysql mysql 606208  1月 13 16:24 city.ibd
+-rw-r-----. 1 mysql mysql 196608  1月 13 18:19 country.ibd
+-rw-r-----. 1 mysql mysql 294912  1月 14 15:18 countrylanguage.ibd
+
+[root@localhost world]# echo a > city.ibd
+[root@localhost world]# echo bbb > city.ibd
+[root@localhost world]# echo cccccccc > countrylanguage.ibd
+[root@localhost world]# echo nruveknvcjfd > country.ibd
+
+[root@localhost world]# ls -ltr
+合計 12
+-rw-r-----. 1 mysql mysql  4  1月 14 15:20 city.ibd
+-rw-r-----. 1 mysql mysql  9  1月 14 15:20 countrylanguage.ibd
+-rw-r-----. 1 mysql mysql 13  1月 14 15:21 country.ibd
+
+→適当な値でファイルを上書き
+
+[admin@localhost etc]$ sudo systemctl restart mysqld
+Job for mysqld.service failed because the control process exited with error code. See "systemctl status mys
+
+→mysqlの再起動時にエラー
+
+[admin@localhost etc]$ journalctl -xe
+-- Unit mysqld.service has begun starting up.
+ 1月 14 15:22:51 localhost.localdomain mysqld[3014]: Starting MySQL.. ERROR! The server quit without updating PID file (/var/lib/mysql/localhost.localdomain.pid).
+ 1月 14 15:22:51 localhost.localdomain systemd[1]: mysqld.service: control process exited, code=exited status=1
+ 1月 14 15:22:51 localhost.localdomain systemd[1]: Failed to start LSB: start and stop MySQL.
+-- Subject: Unit mysqld.service has failed
+-- Defined-By: systemd
+-- Support: http://lists.freedesktop.org/mailman/listinfo/systemd-devel
+--
+-- Unit mysqld.service has failed.
+
+→起動時にPIDの更新エラーになっていることを確認。
+
+[admin@localhost etc]$sudo reboot
+
+[admin@localhost ~]$ sudo systemctl status mysqld
+● mysqld.service - LSB: start and stop MySQL
+   Loaded: loaded (/etc/rc.d/init.d/mysqld; bad; vendor preset: disabled)
+   Active: active (running) since 金 2022-01-14 15:37:13 JST; 13s ago
+   
+サーバリブートで起動することを確認。
+
+
+mysql> use world
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+
+mysql> show tables
+    -> ;
++-----------------+
+| Tables_in_world |
++-----------------+
+| city            |
+| country         |
+| countrylanguage |
++-----------------+
+3 rows in set (0.00 sec)
+
+mysql> select count(*) from city;
+ERROR 1812 (HY000): Tablespace is missing for table `world`.`city`.
+mysql> show warnings;
++---------+------+-----------------------------------------------------+
+| Level   | Code | Message                                             |
++---------+------+-----------------------------------------------------+
+| Warning | 1812 | InnoDB: Tablespace is missing for table world/city. |
+| Error   | 1812 | Tablespace is missing for table `world`.`city`.     |
++---------+------+-----------------------------------------------------+
+2 rows in set (0.00 sec)
+
+mysql> select count(*) from country;
+ERROR 1812 (HY000): Tablespace is missing for table `world`.`country`.
+mysql> show warnings;
++---------+------+--------------------------------------------------------+
+| Level   | Code | Message                                                |
++---------+------+--------------------------------------------------------+
+| Warning | 1812 | InnoDB: Tablespace is missing for table world/country. |
+| Error   | 1812 | Tablespace is missing for table `world`.`country`.     |
++---------+------+--------------------------------------------------------+
+2 rows in set (0.00 sec)
+
+mysql> select count(*) from countrylanguage;
+ERROR 1812 (HY000): Tablespace is missing for table `world`.`countrylanguage`.
+mysql> show warnings;
++---------+------+----------------------------------------------------------------+
+| Level   | Code | Message                                                        |
++---------+------+----------------------------------------------------------------+
+| Warning | 1812 | InnoDB: Tablespace is missing for table world/countrylanguage. |
+| Error   | 1812 | Tablespace is missing for table `world`.`countrylanguage`.     |
++---------+------+----------------------------------------------------------------+
+2 rows in set (0.00 sec)
+
+→テーブルのデータが見つからないことを確認。
+
+Query OK, 0 rows affected, 1 warning (0.04 sec)
+
+
+→テーブルデータが壊れた状態でレプリケーションを実施。
+
+★マスタ作業
+
+mysql> insert into countrylanguage values ('JPN','test11','F',0.0);
+Query OK, 1 row affected (0.01 sec)
+
+→1行データを更新
+
+★レプリカ
+mysql> SHOW REPLICA STATUS\G
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 192.168.56.102
+                  Source_User: mysql_slave
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: bin.000015
+          Read_Source_Log_Pos: 10122
+               Relay_Log_File: localhost-relay-bin.000030
+                Relay_Log_Pos: 318
+        Relay_Source_Log_File: bin.000015
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: No
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 1812
+                   Last_Error: Coordinator stopped because there were error(s) in the worker(s). The most recent failure being: Worker 1 failed executing transaction 'ANONYMOUS' at master log bin.000015, end_log_pos 10091. See error log and/or performance_schema.replication_applier_status_by_worker table for more details about this failure or others, if any.
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 9807
+              Relay_Log_Space: 4328
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: Yes
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: NULL
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 1812
+               Last_SQL_Error: Coordinator stopped because there were error(s) in the worker(s). The most recent failure being: Worker 1 failed executing transaction 'ANONYMOUS' at master log bin.000015, end_log_pos 10091. See error log and/or performance_schema.replication_applier_status_by_worker table for more details about this failure or others, if any.
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 1
+                  Source_UUID: f2483126-727e-11ec-9585-080027855f4e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State:
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp: 220114 15:43:06
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set:
+            Executed_Gtid_Set:
+                Auto_Position: 0
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+→レプリケーションがエラーになることを確認。
+ (IO(マスタからのバイナリログ受け取り)はできていて、それの実行ができていないことを確認。)
+ 
+ mysql> stop replica
+    -> ;
+Query OK, 0 rows affected (0.01 sec)
+
+→一度レプリケーションを停止。
+
+[admin@localhost etc]$ sudo less /var/log/mysql/mysql.log
+2022-01-14T06:43:06.689242Z 11 [Warning] [MY-012049] [InnoDB] Cannot calculate statistics for table `world`.`countrylanguage` because the .ibd file is missing. Please refer to http://dev.mysql.com/doc/refman/8.0/en/innodb-troubleshooting.html for how to resolve the issue.
+2022-01-14T06:43:06.689326Z 11 [ERROR] [MY-010584] [Repl] Slave SQL for channel '': Worker 1 failed executing transaction 'ANONYMOUS' at master log bin.000015, end_log_pos 10091; Error executing row event: 'Tablespace is missing for table `world`.`countrylanguage`.', Error_code: MY-001812
+2022-01-14T06:43:06.690302Z 10 [Warning] [MY-010584] [Repl] Slave SQL for channel '': ... The slave coordinator and worker threads are stopped, possibly leaving data in inconsistent state. A restart should restore consistency automatically, although using non-transactional storage for data or info tables or DDL queries could lead to problems. In such cases you have to examine your data (see documentation for details). Error_code: MY-001756
+
+→グリニッジのため9時間引いた時間？
+以下が記載されている。
+
+・idbファイルが欠けていること。
+・マスタのバイナリログのトランザクションを実行できないこと。
+
+[root@localhost mysql]# echo aaaa > localhost-relay-bin.000029 && echo bb > localhost-relay-bin.000030
+[root@localhost mysql]# ls -ltr
+
+→リレーログからの復旧をできなくするため、リレーログも使用できなくする。
+
+[admin@localhost etc]$ sudo systemctl restart mysqld
+[sudo] admin のパスワード:
+[admin@localhost etc]$ sudo systemctl status mysqld
+● mysqld.service - LSB: start and stop MySQL
+   Loaded: loaded (/etc/rc.d/init.d/mysqld; bad; vendor preset: disabled)
+   Active: active (running) since 金 2022-01-14 16:33:31 JST; 5s ago
+
+→一応サービスの落とし上げを実施。
+ 問題なく立ち上がることを確認。
+ 
+ mysql> SHOW REPLICA STATUS\G
+*************************** 1. row ***************************
+             Replica_IO_State:
+                  Source_Host: 192.168.56.102
+                  Source_User: mysql_slave
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: bin.000015
+          Read_Source_Log_Pos: 10122
+               Relay_Log_File: localhost-relay-bin.000030
+                Relay_Log_Pos: 318
+        Relay_Source_Log_File: bin.000015
+           Replica_IO_Running: No
+          Replica_SQL_Running: No
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 9807
+              Relay_Log_Space: 4299
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: Yes
+           Source_SSL_CA_File:
+           Source_SSL_CA_Path:
+              Source_SSL_Cert:
+            Source_SSL_Cipher:
+               Source_SSL_Key:
+        Seconds_Behind_Source: NULL
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Source_Server_Id: 0
+                  Source_UUID: f2483126-727e-11ec-9585-080027855f4e
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State:
+           Source_Retry_Count: 86400
+                  Source_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Source_SSL_Crl:
+           Source_SSL_Crlpath:
+           Retrieved_Gtid_Set:
+            Executed_Gtid_Set:
+                Auto_Position: 0
+         Replicate_Rewrite_DB:
+                 Channel_Name:
+           Source_TLS_Version:
+       Source_public_key_path:
+        Get_Source_public_key: 0
+            Network_Namespace:
+1 row in set (0.00 sec)
+
+→マスタのバイナリログを使って復旧したいため、現在のスレーブの状況を確認。
+
+                  Source_Host: 192.168.56.102
+                  Source_User: mysql_slave
+                  Source_Port: 3306
+                Connect_Retry: 60
+★              Source_Log_File: bin.000015                    #I/O スレッドが現在読み取っているソースバイナリログファイルの名前。
+          Read_Source_Log_Pos: 10122                         #→I/O スレッドが読み取った現在のソースバイナリログファイル内の位置。
+               Relay_Log_File: localhost-relay-bin.000030    #SQL スレッドが現在読み取って実行している元のリレーログファイルの名前。
+                Relay_Log_Pos: 318                           #現在のリレーログファイル内の SQL スレッドが最後に読み取って実行した位置。(リストア時点)
+        Relay_Source_Log_File: bin.000015                    #SQL スレッドによって実行された最新のイベントを含むソースバイナリログファイルの名前。
+★          Exec_Source_Log_Pos: 9807                          #SQL スレッドが読み込んだソースバイナリログファイルの開始位置
+           Replica_IO_Running: No
+          Replica_SQL_Running: No
+
+mysql> reset slave;
+Query OK, 0 rows affected, 1 warning (0.03 sec)
+
+→一度スレーブをリセット。
+
+mysql> CHANGE REPLICATION SOURCE TO
+    -> SOURCE_HOST='192.168.56.102',
+    -> SOURCE_LOG_FILE='bin.000015',
+    -> SOURCE_LOG_POS=9807,
+    -> SOURCE_SSL=1;
+    
+Query OK, 0 rows affected (0.04 sec)
+
+mysql> START REPLICA user='mysql_slave' password='xxxxxxx';
+Query OK, 0 rows affected, 1 warning (0.02 sec)
+
+mysql> select * from countrylanguage where  CountryCode='JPN';
++-------------+----------------------+------------+------------+
+| CountryCode | Language             | IsOfficial | Percentage |
++-------------+----------------------+------------+------------+
+| JPN         | Ainu                 | F          |        0.0 |
+| JPN         | Chinese              | F          |        0.2 |
+| JPN         | English              | F          |        0.1 |
+| JPN         | Japanese             | T          |       99.1 |
+| JPN         | Korean               | F          |        0.5 |
+| JPN         | Philippene Languages | F          |        0.1 |
+| JPN         | Russian              | F          |        0.0 |
+| JPN         | Spanish              | F          |        0.0 |
+| JPN         | test11               | F          |        0.0 |
++-------------+----------------------+------------+------------+
+9 rows in set (0.00 sec)
+
+→test1~10のレコードが存在しない。
+
+原因)
+→指定したマスタのバイナリファイルの読み取り開始位置が間違えていたため。
+ ※手順の問題である可能性があるため、ログを再度確認。
+ 
+ 
+
+対応）バックアップのタイムスタンプとマスタのバイナリファイル内トランザクションのタイムスタンプを比較し、
+　　　正しい位置を特定。
+
+★レプリカ側作業
+[admin@localhost ~]$ mysql -u root -p < 20210114_db.dump
+→静止点にデータを戻す。(Language：test11のレコードが2回挿入されるのを防止する。)
+
+mysql> use world
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+mysql> select * from countrylanguage where  CountryCode='JPN';
++-------------+----------------------+------------+------------+
+| CountryCode | Language             | IsOfficial | Percentage |
++-------------+----------------------+------------+------------+
+| JPN         | Ainu                 | F          |        0.0 |
+| JPN         | Chinese              | F          |        0.2 |
+| JPN         | English              | F          |        0.1 |
+| JPN         | Japanese             | T          |       99.1 |
+| JPN         | Korean               | F          |        0.5 |
+| JPN         | Philippene Languages | F          |        0.1 |
+| JPN         | Russian              | F          |        0.0 |
+| JPN         | Spanish              | F          |        0.0 |
++-------------+----------------------+------------+------------+
+8 rows in set (0.00 sec)
+
+→データが静止点時点に戻ることを確認。
+
+[admin@localhost ~]$ ls -ltr
+～
+-rw-rw-r--. 1 admin admin 1462734  1月 14 15:16 20210114_db.dump
+
+→dumpのタイムスタンプを確認
+
+★マスタ側確認
+[root@localhost mysql]# mysqlbinlog --start-datetime="2021-01-14 15:16:00" bin.000015
+
+# at 6635
+#220114 15:10:24 server id 1  end_log_pos 6666 CRC32 0xc167631e         Xid = 64
+COMMIT/*!*/;
+# at 6666
+#220114 15:18:27 server id 1  end_log_pos 6745 CRC32 0x44ddc5e9         Anonymous_GTID  last_committed=21       sequence_number=22      rbr_only=yes    original_committed_timestamp=1642141107851064   immediate_commit_timestamp=1642141107851064        transaction_length=314
+/*!50718 SET TRANSACTION ISOLATION LEVEL READ COMMITTED*//*!*/;
+# original_commit_timestamp=1642141107851064 (2022-01-14 15:18:27.851064 JST)
+# immediate_commit_timestamp=1642141107851064 (2022-01-14 15:18:27.851064 JST)
+/*!80001 SET @@session.original_commit_timestamp=1642141107851064*//*!*/;
+/*!80014 SET @@session.original_server_version=80027*//*!*/;
+/*!80014 SET @@session.immediate_server_version=80027*//*!*/;
+SET @@SESSION.GTID_NEXT= 'ANONYMOUS'/*!*/;
+
+→マスタ側のタイムスタンプを確認。
+　バックアップ取得後の最初の位置が6666であることを確認。
+
+
+★レプリカ側作業
+
+mysql> CHANGE REPLICATION SOURCE TO
+    -> SOURCE_HOST='192.168.56.102',
+    -> SOURCE_LOG_FILE='bin.000015',
+    -> SOURCE_LOG_POS=6666,
+    -> SOURCE_SSL=1;
+
+SOURCE_LOG_POSの位置を6666で指定。
+
+mysql> START REPLICA user='mysql_slave' password='xxxxxxxxxxxxx';
+Query OK, 0 rows affected, 1 warning (0.04 sec)
+
+→レプリケーション再開
+
+mysql> use world
+Database changed
+mysql> select * from countrylanguage where  CountryCode='JPN';
++-------------+----------------------+------------+------------+
+| CountryCode | Language             | IsOfficial | Percentage |
++-------------+----------------------+------------+------------+
+| JPN         | Ainu                 | F          |        0.0 |
+| JPN         | Chinese              | F          |        0.2 |
+| JPN         | English              | F          |        0.1 |
+| JPN         | Japanese             | T          |       99.1 |
+| JPN         | Korean               | F          |        0.5 |
+| JPN         | Philippene Languages | F          |        0.1 |
+| JPN         | Russian              | F          |        0.0 |
+| JPN         | Spanish              | F          |        0.0 |
+| JPN         | test1                | F          |        0.0 |
+| JPN         | test10               | F          |        0.0 |
+| JPN         | test11               | F          |        0.0 |
+| JPN         | test2                | F          |        0.0 |
+| JPN         | test3                | F          |        0.0 |
+| JPN         | test4                | F          |        0.0 |
+| JPN         | test5                | F          |        0.0 |
+| JPN         | test6                | F          |        0.0 |
+| JPN         | test7                | F          |        0.0 |
+| JPN         | test8                | F          |        0.0 |
+| JPN         | test9                | F          |        0.0 |
++-------------+----------------------+------------+------------+
+19 rows in set (0.00 sec)
+
+→リストア時点からリカバリされたことを確認。
+
+主な復旧方法)
+
+　・バイナリ
+　・mysqldumpを使用して復旧も可能。
+　・ディスクコピー
+
+◆追加してやること。
+スレーブにinsert+update+drop
+→変な状態になる。
+→マスタに同期させる。
+(バイナリログを使用する以外の方法で、、、)
