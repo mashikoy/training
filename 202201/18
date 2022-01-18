@@ -1,0 +1,667 @@
+[2022/1/18]研修タスクまとめ
+
+◆大枠
+phpビルド作業
+
+◆実作業内容
+
+・apacheの自動起動設定
+
+[admin@localhost rpm]$ cp sudo httpd.init /etc/init.d/httpd
+
+→/etc/init.d/に起動スクリプトをコピー
+
+[admin@localhost rpm]$ sudo vim /etc/init.d/httpd
+
+→以下の通り起動スクリプトを修正
+ (ビルドインストール先を指すように修正)
+
+(修正前)
+httpd=${HTTPD-/usr/sbin/httpd}
+pidfile=${PIDFILE-/var/run/${prog}.pid}
+CONFFILE=/etc/httpd/conf/httpd.conf
+
+(修正後)
+#httpd=${HTTPD-/usr/sbin/httpd}
+httpd=${HTTPD-/usr/local/apache2/bin/httpd}
+#pidfile=${PIDFILE-/var/run/${prog}.pid}
+pidfile=${PIDFILE-/usr/local/apache2/logs/httpd.pid}
+#CONFFILE=/etc/httpd/conf/httpd.conf
+CONFFILE=/usr/local/apache2/conf/httpd.conf
+
+[admin@localhost rpm]$ sudo chkconfig --add httpd
+
+→configにhttpdを追加
+
+[admin@localhost rpm]$ sudo chkconfig httpd on
+
+→httpdを有効化
+
+[admin@localhost rpm]$ systemctl status httpd
+● httpd.service - LSB: start and stop Apache HTTP Server
+   Loaded: loaded (/etc/rc.d/init.d/httpd; bad; vendor preset: disabled)
+   Active: inactive (dead)
+     Docs: man:systemd-sysv-generator(8)
+
+→systemctlコマンドで認識されていることを確認。
+
+[admin@localhost rpm]$ sudo reboot
+
+→リブート実行
+
+[admin@localhost ~]$ sudo systemctl status httpd
+[sudo] admin のパスワード:
+● httpd.service - LSB: start and stop Apache HTTP Server
+   Loaded: loaded (/etc/rc.d/init.d/httpd; bad; vendor preset: disabled)
+   Active: activating (start) since 月 2022-01-17 17:42:05 JST; 43s ago
+
+→activeになっていることおよびブラウザでindex.htmlが表示可能なことを確認。
+
+
+↓ここからbuild作業
+
+・phpビルド作業
+
+◆前提事項確認
+
+＜wordpress要件＞
+・phpバージョン：7.4以上
+
+
+preforkについて、、、
+
+参考サイト：
+[【図解/apache】MPM prefork/worker /event (イベント駆動)の違い～CPUコアの使い方～ \| SEの道標](https://milestone-of-se.nesuke.com/sv-basic/linux-basic/apache-mpm-prefork-worker-event/)
+[ApacheのMPM設定(preforkかworkerかevent比較) [システムパフォーマンス入門]](http://performance.oreda.net/middleware/web/apache-mpm#prefork)
+
+その他読んでおくページ
+[PHP: Apache 2.x (Unixシステム用) - Manual](https://www.php.net/manual/ja/install.unix.apache2.php)
+[Apache HTTP サーバ バージョン 2.4 ドキュメント - Apache HTTP サーバ バージョン 2.4](https://httpd.apache.org/docs/current/)
+
+[admin@localhost src]$ pwd
+/usr/local/src
+[admin@localhost src]$ sudo curl -LO https://www.php.net/distributions/php-8.1.1.tar.gz
+
+→ソースコードの取得と解凍
+
+[admin@localhost bin]$ ./httpd -l
+Compiled in modules:
+  core.c
+  mod_so.c
+  http_core.c
+  event.c
+
+→apacheで、インストールされているモジュールを確認。
+
+MPMで現在はeventが導入されている。
+
+[admin@localhost bin]$ ./httpd -V
+Server version: Apache/2.4.52 (Unix)
+Server built:   Jan  6 2022 16:07:35
+Server's Module Magic Number: 20120211:121
+Server loaded:  APR 1.7.0, APR-UTIL 1.6.1
+Compiled using: APR 1.7.0, APR-UTIL 1.6.1
+Architecture:   64-bit
+★Server MPM:     event
+  threaded:     yes (fixed thread count)
+    forked:     yes (variable process count)
+Server compiled with....
+ -D APR_HAS_SENDFILE
+ -D APR_HAS_MMAP
+ -D APR_HAVE_IPV6 (IPv4-mapped addresses enabled)
+ -D APR_USE_PROC_PTHREAD_SERIALIZE
+ -D APR_USE_PTHREAD_SERIALIZE
+ -D SINGLE_LISTEN_UNSERIALIZED_ACCEPT
+ -D APR_HAS_OTHER_CHILD
+ -D AP_HAVE_RELIABLE_PIPED_LOGS
+ -D DYNAMIC_MODULE_LIMIT=256
+ -D HTTPD_ROOT="/usr/local/apache2"
+ -D SUEXEC_BIN="/usr/local/apache2/bin/suexec"
+ -D DEFAULT_PIDLOG="logs/httpd.pid"
+ -D DEFAULT_SCOREBOARD="logs/apache_runtime_status"
+ -D DEFAULT_ERRORLOG="logs/error_log"
+ -D AP_TYPES_CONFIG_FILE="conf/mime.types"
+ -D SERVER_CONFIG_FILE="conf/httpd.conf"
+
+→Server MPMがeventになっていることを確認。
+
+[admin@localhost metadata]$ cd /usr/local/src/httpd-2.4.52/server/mpm/prefork
+[admin@localhost prefork]$ ls -ltr
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+-rw-r--r--. 1 504 games 56357 12月 13 19:43 prefork.c
+
+[admin@localhost prefork]$ sudo /usr/local/apache2/bin/apxs -c -i -a prefork.c
+
+→apxsコマンドでprefork(ソース)をビルドインストール
+
+-c：コンパイル指示
+-i：インストール指示
+-a：LoadModule行をhttpd.confに書き込み、モジュールを有効化する
+[apxsのオプション \| ⬢ Appirits spirits](https://spirits.appirits.com/doruby/9429/)
+
+※apsxコマンドとは
+apacheのコンパイル時にmod_soモジュールを指定した際に標準でついてくるモジュール。
+拡張モジュールのビルド・インストールが可能。
+
+参考サイト：
+[[Linux::Apache]モジュールを追加する - HirosigeTの日記](https://devb.hatenablog.com/entry/20101128/1290937908)
+
+[admin@localhost prefork]$ sudo find / -name '*prefork*'
+～～～～～～～～～～～～～～～～～～～～～～～～～～
+/usr/local/apache2/modules/prefork.so
+
+→共有ライブラリができていることを確認。
+
+[admin@localhost conf]$ pwd
+/usr/local/apache2/conf
+[admin@localhost conf]$ ls -ltr
+合計 120
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+-rw-r--r--. 1 root root 18488  1月 17 19:02 httpd.conf.bak
+-rw-r--r--. 1 root root 18537  1月 17 19:02 httpd.conf
+[admin@localhost conf]$ diff httpd.conf httpd.conf.bak
+155d154
+< LoadModule mpm_prefork_module modules/prefork.so
+
+→configファイルが更新され(もともとのファイルは「httpd.conf.bak」として退避されている)、
+ビルドインストールしたpreforkが読み込まれていることを確認。
+
+↑ここまで17日に実施---------------------------------------------------------------------
+
+[admin@localhost bin]$ sudo systemctl status httpd
+[sudo] admin のパスワード:
+● httpd.service - LSB: start and stop Apache HTTP Server
+   Loaded: loaded (/etc/rc.d/init.d/httpd; bad; vendor preset: disabled)
+   Active: failed (Result: exit-code) since 火 2022-01-18 09:46:39 JST; 27min ago
+     Docs: man:systemd-sysv-generator(8)
+  Process: 1148 ExecStart=/etc/rc.d/init.d/httpd start (code=exited, status=1/FAILURE)
+  
+  
+ 1月 18 09:46:39 localhost.localdomain systemd[1]: Starting LSB: start and stop Apache HTTP Server...
+ 1月 18 09:46:39 localhost.localdomain httpd[1148]: Starting httpd: AH00534: httpd: Configuration er...ed.
+ 1月 18 09:46:39 localhost.localdomain httpd[1148]: [失敗]
+ 1月 18 09:46:39 localhost.localdomain systemd[1]: httpd.service: control process exited, code=exite...s=1
+ 1月 18 09:46:39 localhost.localdomain systemd[1]: Failed to start LSB: start and stop Apache HTTP Server.
+ 1月 18 09:46:39 localhost.localdomain systemd[1]: Unit httpd.service entered failed state.
+ 1月 18 09:46:39 localhost.localdomain systemd[1]: httpd.service failed.
+Hint: Some lines were ellipsized, use -l to show in full.
+
+→systemctlコマンドで確認したところ、起動時にエラーになっていることを確認。
+
+[admin@localhost logs]$ sudo journalctl -xe
+
+-- The start-up result is done.
+ 1月 18 09:46:39 localhost.localdomain httpd[1148]: Starting httpd: AH00534: httpd: Configuration error: More than one MPM loaded.
+ 1月 18 09:46:39 localhost.localdomain httpd[1148]: [失敗]
+ 1月 18 09:46:39 localhost.localdomain systemd[1]: httpd.service: control process exited, code=exited status=1
+ 1月 18 09:46:39 localhost.localdomain systemd[1]: Failed to start LSB: start and stop Apache HTTP Server.
+-- Subject: Unit httpd.service has failed
+
+→起動時のログを確認し、MPMが2以上ロードされておりエラーになっている記載あり。
+
+・apacheに組み込まれているモジュールを確認
+
+★静的モジュール(インストール時に組み込んだモジュール)
+[admin@localhost apache2]$ httpd -l
+Compiled in modules:
+  core.c
+  mod_so.c
+  http_core.c
+  event.c
+
+★動的モジュール(LoadModuleで動的に読み込むモジュール)
+[admin@localhost conf]$ less httpd.conf　　※デフォルトでコメントアウトされているものも念のため表示
+LoadModule authn_file_module modules/mod_authn_file.so
+#LoadModule authn_dbm_module modules/mod_authn_dbm.so
+#LoadModule authn_anon_module modules/mod_authn_anon.so
+#LoadModule authn_dbd_module modules/mod_authn_dbd.so
+#LoadModule authn_socache_module modules/mod_authn_socache.so
+LoadModule authn_core_module modules/mod_authn_core.so
+LoadModule authz_host_module modules/mod_authz_host.so
+LoadModule authz_groupfile_module modules/mod_authz_groupfile.so
+LoadModule authz_user_module modules/mod_authz_user.so
+#LoadModule authz_dbm_module modules/mod_authz_dbm.so
+#LoadModule authz_owner_module modules/mod_authz_owner.so
+#LoadModule authz_dbd_module modules/mod_authz_dbd.so
+LoadModule authz_core_module modules/mod_authz_core.so
+LoadModule access_compat_module modules/mod_access_compat.so
+LoadModule auth_basic_module modules/mod_auth_basic.so
+#LoadModule auth_form_module modules/mod_auth_form.so
+#LoadModule auth_digest_module modules/mod_auth_digest.so
+#LoadModule allowmethods_module modules/mod_allowmethods.so
+#LoadModule file_cache_module modules/mod_file_cache.so
+#LoadModule cache_module modules/mod_cache.so
+#LoadModule cache_disk_module modules/mod_cache_disk.so
+#LoadModule cache_socache_module modules/mod_cache_socache.so
+#LoadModule socache_shmcb_module modules/mod_socache_shmcb.so
+#LoadModule socache_dbm_module modules/mod_socache_dbm.so
+#LoadModule socache_memcache_module modules/mod_socache_memcache.so
+#LoadModule socache_redis_module modules/mod_socache_redis.so
+#LoadModule watchdog_module modules/mod_watchdog.so
+#LoadModule macro_module modules/mod_macro.so
+#LoadModule dbd_module modules/mod_dbd.so
+#LoadModule dumpio_module modules/mod_dumpio.so
+#LoadModule buffer_module modules/mod_buffer.so
+#LoadModule ratelimit_module modules/mod_ratelimit.so
+LoadModule reqtimeout_module modules/mod_reqtimeout.so
+#LoadModule ext_filter_module modules/mod_ext_filter.so
+#LoadModule request_module modules/mod_request.so
+#LoadModule include_module modules/mod_include.so
+LoadModule filter_module modules/mod_filter.so
+#LoadModule substitute_module modules/mod_substitute.so
+#LoadModule sed_module modules/mod_sed.so
+#LoadModule deflate_module modules/mod_deflate.so
+LoadModule mime_module modules/mod_mime.so
+LoadModule log_config_module modules/mod_log_config.so
+#LoadModule log_debug_module modules/mod_log_debug.so
+#LoadModule logio_module modules/mod_logio.so
+LoadModule env_module modules/mod_env.so
+#LoadModule expires_module modules/mod_expires.so
+LoadModule headers_module modules/mod_headers.so
+#LoadModule unique_id_module modules/mod_unique_id.so
+LoadModule setenvif_module modules/mod_setenvif.so
+LoadModule version_module modules/mod_version.so
+#LoadModule remoteip_module modules/mod_remoteip.so
+#LoadModule proxy_module modules/mod_proxy.so
+#LoadModule proxy_connect_module modules/mod_proxy_connect.so
+#LoadModule proxy_ftp_module modules/mod_proxy_ftp.so
+#LoadModule proxy_http_module modules/mod_proxy_http.so
+#LoadModule proxy_fcgi_module modules/mod_proxy_fcgi.so
+#LoadModule proxy_scgi_module modules/mod_proxy_scgi.so
+#LoadModule proxy_uwsgi_module modules/mod_proxy_uwsgi.so
+#LoadModule proxy_fdpass_module modules/mod_proxy_fdpass.so
+#LoadModule proxy_wstunnel_module modules/mod_proxy_wstunnel.so
+#LoadModule proxy_ajp_module modules/mod_proxy_ajp.so
+#LoadModule proxy_balancer_module modules/mod_proxy_balancer.so
+#LoadModule proxy_express_module modules/mod_proxy_express.so
+#LoadModule proxy_hcheck_module modules/mod_proxy_hcheck.so
+#LoadModule session_module modules/mod_session.so
+#LoadModule session_cookie_module modules/mod_session_cookie.so
+#LoadModule session_dbd_module modules/mod_session_dbd.so
+#LoadModule slotmem_shm_module modules/mod_slotmem_shm.so
+#LoadModule ssl_module modules/mod_ssl.so
+#LoadModule lbmethod_byrequests_module modules/mod_lbmethod_byrequests.so
+#LoadModule lbmethod_bytraffic_module modules/mod_lbmethod_bytraffic.so
+#LoadModule lbmethod_bybusyness_module modules/mod_lbmethod_bybusyness.so
+#LoadModule lbmethod_heartbeat_module modules/mod_lbmethod_heartbeat.so
+LoadModule unixd_module modules/mod_unixd.so
+#LoadModule dav_module modules/mod_dav.so
+LoadModule status_module modules/mod_status.so
+LoadModule autoindex_module modules/mod_autoindex.so
+#LoadModule info_module modules/mod_info.so
+#LoadModule cgid_module modules/mod_cgid.so
+#LoadModule dav_fs_module modules/mod_dav_fs.so
+#LoadModule vhost_alias_module modules/mod_vhost_alias.so
+#LoadModule negotiation_module modules/mod_negotiation.so
+LoadModule dir_module modules/mod_dir.so
+#LoadModule actions_module modules/mod_actions.so
+#LoadModule speling_module modules/mod_speling.so
+#LoadModule userdir_module modules/mod_userdir.so
+LoadModule alias_module modules/mod_alias.so
+#LoadModule rewrite_module modules/mod_rewrite.so
+LoadModule mpm_prefork_module modules/prefork.so
+
+→event.cが静的モジュールとして組み込まれているため、preforkを組み込むように再インストール
+(また、他のMPMモジュールに切り替えられるよう--enable-mpms-shared=allも指定。)
+
+[admin@localhost httpd-2.4.52]$ ./configure --help
+
+参考サイト）
+[(https://www.itmedia.co.jp/help/tips/linux/l0371.html)
+→configureオプション見直し
+
+[admin@localhost httpd-2.4.52]$ sudo make uninstall
+make: *** ターゲット `uninstall' を make するルールがありません.  中止.
+
+→apacheは「make uninstall」に対応していないため、手動でファイルの削除を行う。
+
+[admin@localhost httpd-2.4.52]$ sudo systemctl stop httpd
+
+→エラーで起動していないが念のため停止コマンド実行
+
+[admin@localhost tmp]$ mkdir apache2_install_tmp
+
+→/tmp直下に仮インストール用のディレクトリを配置
+　　※仮ディレクトリに再インストールすることにより、インストールしているファイル一覧を出力する。
+
+[admin@localhost httpd-2.4.52]$ sudo make install DESTDIR=/tmp/apache2_install_tmp
+
+[admin@localhost tmp]$ sudo find /tmp/apache2_install_tmp -type f -print > /tmp/apache2-install-test.txt
+
+→インストールしたファイル一覧をテキストに出力
+
+[admin@localhost tmp]$ sudo sed -i "s/\/tmp\/apache2_install_tmp//g" apache2-install-test.txt
+
+→出力したファイル一覧について、パスを修正
+
+(修正前)
+/tmp/apache2_install_tmp/usr/local/apache2/
+
+(修正後)
+/usr/local/apache2/
+
+[admin@localhost tmp]$ httpd -v
+Server version: Apache/2.4.52 (Unix)
+Server built:   Jan  6 2022 16:07:35
+
+[admin@localhost tmp]$ cat /tmp/apache2-install-test.txt | sudo xargs rm -f
+
+→ファイル一覧をcatで展開し、そのままrmコマンドに引き渡す。
+
+[admin@localhost tmp]$ httpd -v
+-bash: /usr/local/apache2/bin/httpd: そのようなファイルやディレクトリはありません
+
+ファイルが削除され、コマンドが使用できなくなっていることを確認。
+
+[admin@localhost local]$ ls
+apache2  apr  bin  doc  etc  games  include  lib  lib64  libexec  mysql  sbin  share  src
+[admin@localhost local]$ sudo rm -rf apache2/
+[admin@localhost local]$ ls
+apr  bin  doc  etc  games  include  lib  lib64  libexec  mysql  sbin  share  src
+
+→ゴミ(空ディレクトリ)を削除
+
+[admin@localhost tmp]$ sudo rm -rf apache2_install_tmp apache2-install-test.txt
+
+→仮インストールディレクトリを丸々削除
+
+[admin@localhost tmp]$ sudo systemctl disable httpd.service
+httpd.service is not a native service, redirecting to /sbin/chkconfig.
+Executing /sbin/chkconfig httpd off
+[admin@localhost tmp]$ echo $?
+0
+
+→サービスから削除。
+
+[admin@localhost tmp]$ sudo reboot
+
+
+→リブート
+[admin@localhost ~]$ sudo systemctl status httpd
+～～～～～～～～～～～～～～～～～～～～～
+   Active: inactive (dead)
+
+→サービスがinactiveになっていることを確認。
+
+[admin@localhost httpd-2.4.52]$ sudo make clean
+→きれいな状態にするため、「make clean」実行
+　※makeコマンドにて作成したオブジェクトファイルをすべて削除
+
+[admin@localhost httpd-2.4.52]$ sudo make distclean
+→きれいな状態にするため、「make clean distclean」実行
+　※configureコマンドにて作成したMakefileを削除
+
+
+enable-mods-sharedについて、以下モジュールを使用
+mod_log_forensic(all:有 most:無)
+　→HTTPリクエストの詳細なログを出力する。
+
+　※1つだけなので--withで指定してもよいが、あとで動的にモジュールをincludeしたくなった時のためにallを指定。
+
+　※reallyallは少し見た限り使用しなさそう、、、(mod_isapi　※windows用モジュールとか、コアな機能。あと調べてもよくわからなかったり、、、)
+
+参考サイト：
+[[httpd][2.4]コンパイル時のenable-mods-sharedの指定による違い](http://tech-wiki.pomme-verte.net/?p=550)
+[Apache の標準モジュールを（だいたい）全部調べてみた - くじらにっき++](https://kujira16.hateblo.jp/entry/2020/07/25/152508)
+
+authnとauthzの違い、、、
+authn：本人認証系のモジュール
+authz：認可系のモジュール
+
+HTTP/2とは、、、
+https://www.kagoya.jp/howto/it-glossary/security/http-2/
+
+webdavについて、、、
+https://academy.gmocloud.com/keywords/20170310/4148#:~:text=WebDAV%EF%BC%88%E3%82%A6%E3%82%A7%E3%83%96%E3%83%80%E3%83%96%EF%BC%89%E3%81%A8%E3%81%AF%E3%80%81,%E3%83%97%E3%83%AD%E3%83%88%E3%82%B3%E3%83%AB%EF%BC%89%E3%81%AE%E6%8B%A1%E5%BC%B5%E5%BD%A2%E5%BC%8F%E3%81%A7%E3%81%99%E3%80%82&text=WebDAV%E3%81%AF%E3%80%81%E3%81%9D%E3%82%93%E3%81%AAHTTP%E3%81%AE,%E5%8F%AF%E8%83%BD%E3%81%AB%E3%81%97%E3%81%9F%E6%8A%80%E8%A1%93%E3%81%A7%E3%81%99%E3%80%82
+
+面白そうなモジュール
+・mod_imagemap
+→画像中の指定した箇所にリンクなどを設定できる。
+
+
+[admin@localhost httpd-2.4.52]$ sudo ./configure --with-apr=/usr/local/apr --with-apr-util=/usr/local/apr --enable-so --enable-module=rewrite --enable-ssl --enable-mpms-shared=all --with-mpm=prefork --enable-mods-shared=all
+
+[admin@localhost httpd-2.4.52]$ echo $?
+0
+
+→configureコマンド実行
+
+※前回との相違点
+1.mpmは一応全部いれておいて、preforkを指定
+2.前回enable-mods-sharedを指定していない(デフォルト：most)だったが、allに含まれるmod_log_forensicを使用するので明示的にallを指定
+
+(前回実行時)
+sudo ./configure --with-apr=/usr/local/apr --with-apr-util=/usr/local/apr --enable-so --enable-module=rewrite --enable-ssl
+
+(今回実行時)
+sudo ./configure --with-apr=/usr/local/apr --with-apr-util=/usr/local/apr --enable-so --enable-module=rewrite --enable-ssl --enable-mpms-shared=all --with-mpm=prefork --enable-mods-shared=all
+
+
+[admin@localhost httpd-2.4.52]$ ls -l Makefile
+-rw-r--r--. 1 root root 12130  1月 18 14:00 Makefile
+[admin@localhost httpd-2.4.52]$ sudo make
+
+[admin@localhost httpd-2.4.52]$ echo $?
+0
+
+[admin@localhost httpd-2.4.52]$ sudo make install
+
+[admin@localhost httpd-2.4.52]$ echo $?
+0
+
+→コンパイルおよびインストール
+
+[admin@localhost htdocs]$ sudo sed -i "s/www.example.com/localhost/" httpd.conf
+
+→サーバネームを修正
+
+(修正前)
+www.example.com
+
+(修正後)
+localhost
+
+[admin@localhost htdocs]$ sudo sed -i "s/It works/Hello world/" index.html
+
+[admin@localhost bin]$ sudo ./apachectl start
+
+→apache起動+ブラウザ確認
+
+[admin@localhost rpm]$ sudo chkconfig httpd on
+
+→自動起動設定有効化
+
+[admin@localhost rpm]$ sudo chkconfig --list httpd
+
+httpd           0:off   1:off   2:on    3:on    4:on    5:on    6:off
+
+→runレベル2~5の時自動起動onに
+
+ランレベル参考サイト：
+https://atmarkit.itmedia.co.jp/flinux/rensai/linuxtips/156whatrunlv.html
+
+[admin@localhost rpm]$ sudo reboot
+
+[admin@localhost ~]$ sudo systemctl status httpd
+
+● httpd.service - LSB: start and stop Apache HTTP Server
+   Loaded: loaded (/etc/rc.d/init.d/httpd; bad; vendor preset: disabled)
+   Active: activating (start) since 火 2022-01-18 14:25:22 JST; 31s ago
+
+→自動起動されていることを確認。
+
+[admin@localhost ~]$ httpd -V
+Server version: Apache/2.4.52 (Unix)
+Server built:   Jan 18 2022 14:01:08
+Server's Module Magic Number: 20120211:121
+Server loaded:  APR 1.7.0, APR-UTIL 1.6.1
+Compiled using: APR 1.7.0, APR-UTIL 1.6.1
+Architecture:   64-bit
+★Server MPM:     prefork
+  threaded:     no
+    forked:     yes (variable process count)
+
+→Server MPMがpreforkであることを確認。
+
+[admin@localhost php-8.1.1]$ ./configure --help
+
+https://www.php.net/manual/ja/configure.about.php
+参考サイト
+
+→指定するオプションを確認。
+
+参考サイト
+https://gendosu.jp/archives/828
+
+[Server Environment – Make WordPress Hosting](https://make.wordpress.org/hosting/handbook/server-environment/#php-extensions)
+
+★必須条件
+
+1.json：他サーバとのやり取りやjsonフォーマットのデータ処理のために必要
+　※PHP8.0以上のバージョンではデフォルトで組み込まれており、今回は8.1.1のため特に何もしない。
+ 　前は--with-jsonオプションをつけてmakeファイルを作る必要があった。
+  
+ 　　[PHP: インストール手順 - Manual](https://www.php.net/manual/ja/json.installation.php)
+
+☆2.mysqli or mysql or mysqlnd：MySQLとの相互接続に使用(--with-mysqli)
+
+　※mysqli(MySQL improved extension)とは、、
+ PHPからMySQL/MariaDBデータベースを操作するためのインターフェースを提供する、PHPの拡張機能
+ デフォルトでmysqlndを使用する。
+ 
+  ※mysqlndとは、、
+  MySQL Native Driverで、mysql→phpへのアクセスを可能にする。
+  同じくドライバにlibmysqlclientがあるが、非同期クエリやパフォーマンス統計などmysqlndにしかできないこともあるので、mysqlndのほうが便利そう？
+  php公式ドキュメントでもmysqlndを推奨している。
+  
+  mysqliで明示的にドライバを指定していないとmysqlndが使用される。
+  　※以下公式ページ抜粋
+  // もうひとつのおすすめの方法。mysqlnd を使ってコンパイルします。
+   $ ./configure --with-mysqli --with-pdo-mysql
+   
+   mysqliとpdoの違いについて、、
+   [【PHP】DB接続 mysqliとPDOの違い](https://zenn.dev/lotoyamaguchi/articles/8a06f015fc4bcd)
+ 
+ 参考サイト）
+ https://gray-code.com/php/connection-db-by-using-mysqli/
+ [PHP: どのライブラリを選ぶか - Manual](https://www.php.net/manual/ja/mysqlinfo.library.choosing.php)
+ 
+ ★推奨事項
+ (必須ではないが、操作の最適化・たくさんのプラグイン、テーマの高い互換性のために推奨。
+  今回は全て導入予定。)
+ 
+ ☆1.curl:リモートのリクエスト操作の実行に必要。(--with-curl )
+ 2.dom:ブログのテキストパーツのバリデートに使用。あとはIIS7+を自動的に設定する機能もある？？
+   (domは標準でついているため何もしない。 使用しない場合は明示的にdisableを指定する必要あり。)
+ ☆3.exif:画像に保存されたメタデータ(alt?)の動作に必要。(音声読み上げ？)(--enable-exif )
+ 4.fileinfo:データ形式の識別に使用。
+   (foleinfoは標準でついているため何もしない。 使用しない場合は明示的にdisableを指定する必要あり。)
+ ☆5.hash:パスワードやコンテンツの保護(--with-mhash)
+ 6.imagick:画像、メディアの品質向上？(サムネイル作成、画像処理とかできるようになる。)
+  [imagickがインストールされていない、の解決方法【WPサイトヘルス】](https://wp-customize.net/wordpress/7994.html)
+  (configure --helpになかったため、後ほどpeclで導入)
+ ☆7.mbstring:UTF8テキストのハンドリングに使用(--enable-mbstring)
+ ☆8.openssl:他ホストとのSSLベースの接続に使用(--with-openssl)
+ 9.pcre: ソースコード探索時のパターンマッチングのパフォーマンスをあげる。(コア拡張モジュールのため、常に有効化されている。(4.2.0以降)特に何もしない。)
+ 10.xml:他サイトのxml解析のために必要。
+   (xmlは標準でついているため何もしない。 使用しない場合は明示的にdisableを指定する必要あり。)
+ ☆11.zip:使用するパッケージやプラグインの解凍に使われる。(--with-zip )
+
+★あったらいいくらい、、(wordpressが特定の条件化で使うかもしれないモジュール。必ずしも必要でないとの記載があるが、インストールしても特に問題ない旨記載があるため一応インストール)
+
+☆1.bcmath:整数の精度をあげるためのモジュール。10進数2147483647まで精度をあげる。(--enable-bcmath)
+2.filter:userのinputに対してフィルタリングする。(インジェクション対策？)
+  (5.2以上標準でついているため、特に何もしない。使用しない場合は明示的にdisableを指定する必要あり。)
+☆3.gd:imagickがはいっていない時に機能は若干縮退するが代わりに使用される。(--enable-gd)
+  ※後でimagickを導入する予定だが、一応指定。
+4.iconv:文字コードの相互変換に使用。
+  (iconvは標準でついているため何もしない。 使用しない場合は明示的にdisableを指定する必要あり。)
+☆5.intl:国(ロケール)によって固有の操作を行えるようにする。国固有の書式やロケールに応じた文字列比較カレンダー操作など。(--enable-intl)
+  [PHP: はじめに - Manual](https://www.php.net/manual/ja/intro.intl.php)
+6.mcrypt:libsodium(phpのライブラリ)や/dev/urandom(Linux/UNXで使用されるランダムな数値を生成するファイル)が使用できない時に、ランダムなバイト列を生成する。(php7.2で消えた。今回はphp8.1.1でやはりconfig --helpにも含まれていないため、何もしない。)
+7.simplexml:xmlの解析に使用。
+  (simplexmlは7で標準でついているため何もしない。 使用しない場合は明示的にdisableを指定する必要あり。)
+☆8.sodium:シグネチャのバリデート(ウィルス検出？)やランダムなバイト列を生成する。(--with-sodium)
+9.xmlreader:xmlの解析を行う。
+  (xmlreaderは標準でついているため何もしない。 使用しない場合は明示的にdisableを指定する必要あり。)
+☆10.zlib:gzip圧縮・解凍を行う。(--with-zlib)
+
+★サーバでファイルの書き込みができなくなった時(プラグイン/テーマのアップデートなどを想定)に使用。
+
+1.ssh2:通信を暗号化してリモートアクセス。
+  (configure --helpで見つからなかっため、あとでpeclでインストール)
+☆2.ftp:ftpプロトコルを使用してクライアント→サーバにアクセス(-enable-ftp)
+☆3.sockets:(-enable-sockets)
+
+→☆がついているものはconfigureで指定するもの。
+ +apacheの指定を行う。
+ 
+ [admin@localhost php-8.1.1]$ pwd
+/usr/local/src/php-8.1.1
+
+[admin@localhost php-8.1.1]$ sudo ./configure --with-mysqli --with-curl --enable-exif --with-mhash --enable-mbstring --with-openssl --with-zip --enable-bcmath --enable-gd --enable-intl --with-sodium --with-zlib -enable-ftp -enable-sockets --with-apxs2=/usr/local/apache2/bin/apxs
+
+[admin@localhost php-8.1.1]$ echo $?
+1
+
+→configure実行時にエラー
+
+checking for libxml-2.0 >= 2.9.0... no
+configure: error: Package requirements (libxml-2.0 >= 2.9.0) were not met:
+
+No package 'libxml-2.0' found
+
+補足）
+libxml2とは、、
+
+xmlを解析するライブラリ
+xmllintというlibxml2を使用したツールもある。(xmlの検証や整形(改行やインデントしたり、、))
+
+参考サイト）
+https://saj.co.jp/techinfo/htmls/xml-libxml2-introduction.html
+
+
+[admin@localhost php-8.1.1]$ sudo yum install libxml2 libxml2-devel
+
+・再度実行
+[admin@localhost php-8.1.1]$ sudo ./configure --with-mysqli --with-curl --enable-exif --with-mhash --enable-mbstring --with-openssl --with-zip --enable-bcmath --enable-gd --enable-intl --with-sodium --with-zlib -enable-ftp -enable-sockets --with-apxs2=/usr/local/apache2/bin/apxs
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+checking for sqlite3 >= 3.7.7... no
+configure: error: Package requirements (sqlite3 >= 3.7.7) were not met:
+
+No package 'sqlite3' found
+
+→sqlite3のパッケージがないためエラー
+ mysqlは標準でsqliteを搭載しているが、データベースはmysqlを使用するためwithoutで除外して実行
+ 
+ [admin@localhost php-8.1.1]$ sudo ./configure --with-mysqli --with-curl --enable-exif --with-mhash --enable-mbstring --with-openssl --with-zip --enable-bcmath --enable-gd --enable-intl --with-sodium --with-zlib -enable-ftp -enable-sockets --with-apxs2=/usr/local/apache2/bin/apxs --without-sqlite3
+ 
+ ～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+ configure: error: Package requirements (icu-uc >= 50.1 icu-io icu-i18n) were not met:
+
+No package 'icu-uc' found
+No package 'icu-io' found
+No package 'icu-i18n' found
+
+→再度パッケージ不足のエラー
+
+icuとは(International Components for Unicode  )、、
+世界中の文字コードとUnicodeの相互変換を可能にするライブラリ。
+
+configureでiconvを指定したためここで必要になっていると思われる、、、、、
+
+参考サイト）
+https://unicode-org.github.io/icu/userguide/icu/i18n.html#icu-services-overview
+[ICU - International Components for Unicode - Linux Tips](https://icu.unicode.org/repository/tips/linux)
+
+↑1/18ここまで-----------------------------------------------------------------------------------
+
+確認事項
+preforkとworkerとeventの3つのアーキテクチャを理解する。
+
+参考サイト）
+[2015年Webサーバアーキテクチャ序論 - ゆううきブログ](https://blog.yuuk.io/entry/2015-webserver-architecture)
+
+補足）
+windows：マルチスレッドが多い(Copy on Writeがないため)
