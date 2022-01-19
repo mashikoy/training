@@ -625,17 +625,6 @@ https://saj.co.jp/techinfo/htmls/xml-libxml2-introduction.html
 
 ・再度実行
 [admin@localhost php-8.1.1]$ sudo ./configure --with-mysqli --with-curl --enable-exif --with-mhash --enable-mbstring --with-openssl --with-zip --enable-bcmath --enable-gd --enable-intl --with-sodium --with-zlib -enable-ftp -enable-sockets --with-apxs2=/usr/local/apache2/bin/apxs
-
-～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
-checking for sqlite3 >= 3.7.7... no
-configure: error: Package requirements (sqlite3 >= 3.7.7) were not met:
-
-No package 'sqlite3' found
-
-→sqlite3のパッケージがないためエラー
- mysqlは標準でsqliteを搭載しているが、データベースはmysqlを使用するためwithoutで除外して実行
- 
- [admin@localhost php-8.1.1]$ sudo ./configure --with-mysqli --with-curl --enable-exif --with-mhash --enable-mbstring --with-openssl --with-zip --enable-bcmath --enable-gd --enable-intl --with-sodium --with-zlib -enable-ftp -enable-sockets --with-apxs2=/usr/local/apache2/bin/apxs --without-sqlite3
  
  ～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
  configure: error: Package requirements (icu-uc >= 50.1 icu-io icu-i18n) were not met:
