@@ -1,0 +1,389 @@
+[2022/1/19]研修タスクまとめ
+
+※昨日のphpビルド作業の続き
+
+[admin@localhost ~]$ sudo yum install libicu-devel
+
+→不足していたパッケージのインストール
+
+[admin@localhost php-8.1.1]$ sudo ./configure --with-mysqli --with-curl --enable-exif --with-mhash --enable-mbstring --with-openssl --with-zip --enable-bcmath --enable-gd --enable-intl --with-sodium --with-zlib -enable-ftp -enable-sockets --with-apxs2=/usr/local/apache2/bin/apxs
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+checking for oniguruma... no
+configure: error: Package requirements (oniguruma) were not met:
+
+No package 'oniguruma' found
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+→再度configure実行
+ onigurumaがはいっていないためエラーに
+
+補足）onigurumaとは、、、
+
+rubyやohoで使用される正規表現ライブラリ。
+正規表現のオブジェクトを作成し、異なる文字コードで処理できる。
+
+参考サイト）
+[鬼車 (ライブラリ) - Wikipedia](https://ja.wikipedia.org/wiki/%E9%AC%BC%E8%BB%8A_(%E3%83%A9%E3%82%A4%E3%83%96%E3%83%A9%E3%83%AA))
+[oniguruma/RE.ja at master · kkos/oniguruma · GitHub](https://github.com/kkos/oniguruma/blob/master/doc/RE.ja)
+
+[admin@localhost php-8.1.1]$ sudo rpm -ivh   https://download-ib01.fedoraproject.org/pub/epel/7/x86_64/Pack
+ages/o/oniguruma-6.8.2-1.el7.x86_64.rpm 
+[admin@localhost php-8.1.1]$ sudo rpm -ivh https://download-ib01.fedoraproject.org/pub/epel/7/x86_64/Packages/o/oniguruma-devel-6.8.2-1.el7.x86_64.rpm
+
+
+
+[admin@localhost php-8.1.1]$ sudo ./configure --with-mysqli --with-curl --enable-exif --with-mhash --enable-mbstring --with-openssl --with-zip --enable-bcmath --enable-gd --enable-intl --with-sodium --with-zlib -enable-ftp -enable-sockets --with-apxs2=/usr/local/apache2/bin/apxs
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+checking for sqlite3 >= 3.7.7... no
+configure: error: Package requirements (sqlite3 >= 3.7.7) were not met:
+
+No package 'sqlite3' found
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+→再度実行
+ 3.7.7以上のsqlite3がないためエラーに、、
+
+[admin@localhost php-8.1.1]$ sqlite3 --version
+3.7.17 2013-05-20 00:56:22 118a3b35693b134d56ebd780123b7fd6f1497668
+
+→バージョンを見てみたら3.7.17のバージョンあり。
+
+[admin@localhost php-8.1.1]$ sudo yum install sqlite-devel
+
+→sqlite-develが不足している可能性があるため、sqlite-develのインストールを実行
+
+[admin@localhost php-8.1.1]$ sudo ./configure --with-mysqli --with-curl --enable-exif --with-mhash --enable-mbstring --with-openssl --with-zip --enable-bcmath --enable-gd --enable-intl --with-sodium --with-zlib -enable-ftp -enable-sockets --with-apxs2=/usr/local/apache2/bin/apxs
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+checking for libsodium >= 1.0.8... no
+configure: error: Package requirements (libsodium >= 1.0.8) were not met:
+
+No package 'libsodium' found
+
+→再度実行し、libsodiumがないためエラーに、、
+
+[admin@localhost php-8.1.1]$ sudo rpm -ivh https://download-ib01.fedoraproject.org/pub/epel/7/x86_64/Packag      es/l/libsodium-1.0.18-1.el7.x86_64.rpm
+[admin@localhost php-8.1.1]$ sudo rpm -ivh https://download-ib01.fedoraproject.org/pub/epel/7/x86_64/Packag      es/l/libsodium-devel-1.0.18-1.el7.x86_64.rpm
+
+→libsodiumとlibsodium-develをインストール
+
+補足）libsodiumとは、、、
+クロスプラットフォーム、複数のプログラミング言語で使用可能な暗号ライブラリ。
+暗号／復号、署名、パスワード用ハッシュ生成などの機能がある。
+PHP7.2以降標準ライブラリになった。
+暗号化アルゴリズムにChaCha20-Poly1305を使用している。
+ChaCha20-Poly1305へは効率的な攻撃手段がないためopen-sslよりも安全、、？
+最新のTLS1.3でも使用されている。
+
+参考サイト：
+[PHP業界の重鎮　廣川類氏のはコラム第三回　次のPHPはどうなる？ バージョン7.2でここが変わる \| KUSANAGI MAGAZINE](https://column.prime-strategy.co.jp/archives/column_1714#:~:text=PHP%207.2%E3%81%AE%E6%96%B0%E6%A9%9F%E8%83%BD%EF%BC%9ASodium%E3%83%A9%E3%82%A4%E3%83%96%E3%83%A9%E3%83%AA%E3%81%AE%E6%A8%99%E6%BA%96%E5%8C%96,-PHP%207.2%E3%81%A7%E3%81%AF&text=Libsodium%E3%81%AF%E3%80%81%E3%82%AF%E3%83%AD%E3%82%B9%E3%83%97%E3%83%A9%E3%83%83%E3%83%88%E3%83%95%E3%82%A9%E3%83%BC%E3%83%A0%E3%80%81%E8%A4%87%E6%95%B0,%E3%82%92%E6%9C%89%E3%81%97%E3%81%A6%E3%81%84%E3%81%BE%E3%81%99%E3%80%82)
+<https://www.zend.com/blog/libsodium-and-php-encrypt>
+[](https://www.cryptrec.go.jp/exreport/cryptrec-ex-2702-2017.pdf)
+
+
+
+[admin@localhost php-8.1.1]$ sudo ./configure --with-mysqli --with-curl --enable-exif --with-mhash --enable-mbstring --with-openssl --with-zip --enable-bcmath --enable-gd --enable-intl --with-sodium --with-zlib -enable-ftp -enable-sockets --with-apxs2=/usr/local/apache2/bin/apxs
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+checking for libzip >= 0.11 libzip != 1.3.1 libzip != 1.7.0... no
+configure: error: Package requirements (libzip >= 0.11 libzip != 1.3.1 libzip != 1.7.0) were not met:
+
+No package 'libzip' found
+No package 'libzip' found
+No package 'libzip' found
+
+→再度configureを実行。libzipがないためエラーに、、、
+
+補足）libzipについて、、、
+[libzip - Wikipedia](https://en.wikipedia.org/wiki/Libzip)
+
+[admin@localhost php-8.1.1]$ sudo yum install libzip libzip-devel
+
+[admin@localhost php-8.1.1]$ sudo ./configure --with-mysqli --with-curl --enable-exif --with-mhash --enable-mbstring --with-openssl --with-zip --enable-bcmath --enable-gd --enable-intl --with-sodium --with-zlib -enable-ftp -enable-sockets --with-apxs2=/usr/local/apache2/bin/apxs
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+configure: error: Package requirements (libzip >= 0.11 libzip != 1.3.1 libzip != 1.7.0) were not met:
+
+Requested 'libzip >= 0.11' but version of libzip is 0.10.1
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+→libzipをインストールし再度configureを実行したが、導入されたバージョンが古くエラーに、、、
+
+ 標準レポジトリでサポートしているバージョンが古い可能性があるため、より新しいバージョンを導入する必要あり。
+ 
+ 導入方法)
+  1.新しいバージョンをソースビルド
+  2.新しいバージョンをサポートしているレポジトリを追加
+ 
+ →remiというレポジトリが新しいバージョンのlibzipがインストール可能なため、remiを追加する。
+ 
+ 補足）remiとは、、、
+ [epelとは remiとは \| クズリーマンのカス備忘録](https://it-afi.com/centos/post-1251/#toc1)
+ 
+ [admin@localhost php-8.1.1]$ sudo yum repolist all | grep epel　※何も出なかった
+ [admin@localhost php-8.1.1]$ sudo yum install epel-release
+ 
+ →先に依存関係のあるepelリポジトリを追加する。(epalもサードパーティリポジトリ)
+ 
+[admin@localhost php-8.1.1]$ sudo yum install https://rpms.remirepo.net/enterprise/remi-release-7.rpm
+
+[admin@localhost php-8.1.1]$ sudo yum repolist all | egrep 'epel|remi'
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+epel/x86_64                         Extra Packages for Enterprise L 有効: 13,713
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+remi-safe                           Safe Remi's RPM repository for  有効:  4,684
+
+→remiを追加する。
+ epelとremiが追加されていることを確認。
+ 
+ [admin@localhost php-8.1.1]$ sudo yum install https://rpms.remirepo.net/enterprise/7/remi/x86_64/libzip-last-1.1.3-1.el7.remi.x86_64.rpm
+ →成功
+ 
+ [admin@localhost php-8.1.1]$ sudo yum install https://rpms.remirepo.net/enterprise/7/remi/x86_64/libzip-last-devel-1.1.3-1.el7.remi.x86_64.rpm
+ →コンフリクト(先ほどいれたlibzip-devel-0.10.1-8.el7.x86_64と衝突)
+ 
+ [admin@localhost php-8.1.1]$ sudo yum install https://rpms.remirepo.net/enterprise/7/remi/x86_64/libzip-last-tools-1.1.3-1.el7.remi.x86_64.rpm
+→コンフリクト(先ほどいれたlibzip-0.10.1-8.el7.x86_64と衝突)
+
+[admin@localhost php-8.1.1]$ sudo yum remove libzip.x86_64
+→依存性関連でlibzip-develも削除
+
+[admin@localhost php-8.1.1]$ sudo yum install https://rpms.remirepo.net/enterprise/7/remi/x86_64/libzip-last-devel-1.1.3-1.el7.remi.x86_64.rpm
+→成功
+
+[admin@localhost php-8.1.1]$ sudo yum install https://rpms.remirepo.net/enterprise/7/remi/x86_64/libzip-last-tools-1.1.3-1.el7.remi.x86_64.rpmc
+→成功(コマンドライン用IFを提供する。使用しないかもしれないが、一応いれておく。)
+
+
+[admin@localhost php-8.1.1]$ sudo ./configure --with-mysqli --with-curl --enable-exif --with-mhash --enable-mbstring --with-openssl --with-zip --enable-bcmath --enable-gd --enable-intl --with-sodium --with-zlib -enable-ftp -enable-sockets --with-apxs2=/usr/local/apache2/bin/apxs
+
+[admin@localhost php-8.1.1]$ echo $?
+0
+
+-rw-r--r--. 1 root root 363359  1月 19 12:00 Makefile
+-rw-r--r--. 1 root root  14928  1月 19 12:00 Makefile.fragments
+-rw-r--r--. 1 root root 314126  1月 19 12:00 Makefile.objects
+
+→makefileが作成できたことを確認。
+
+[admin@localhost php-8.1.1]$ echo $?
+0
+
+[admin@localhost php-8.1.1]$sudo make test
+
+=====================================================================
+TIME END 2022-01-19 03:24:39
+
+=====================================================================
+TEST RESULT SUMMARY
+---------------------------------------------------------------------
+Exts skipped    :   32
+Exts tested     :   40
+---------------------------------------------------------------------
+
+Number of tests : 17076             13519
+Tests skipped   : 3557 ( 20.8%) --------
+Tests warned    :    1 (  0.0%) (  0.0%)
+Tests failed    :   57 (  0.3%) (  0.4%)
+Expected fail   :   28 (  0.2%) (  0.2%)
+Tests passed    : 13433 ( 78.7%) ( 99.4%)
+---------------------------------------------------------------------
+Time taken      :  484 seconds
+=====================================================================
+
+→57件テストがfail
+
+57件について、個別にテストを実施したところopcacheに関するテストはすべてクリア(45件)
+(make test TESTS=～)
+
+(同時に大量のテストを実行していたため、キャッシュがクリアされた？)
+
+個別に実行してもエラーになったのは以下12個
+
+×Bug #74093 (Maximum execution time of n+2 seconds exceed not written in error_log) [Zend/tests/bug74093.phpt]
+
+→最大実行時間から2秒以内にライブラリコールが返ってこなかった際、エラーログに詳細な情報が出力されないバグが解消されているか確認するエラー。
+ システムの動きに問題はなく、原因もわからないためあとで検証。
+
+↓☆で囲っているのはintl(wordpress環境における導入優先低い)
+☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆
+×compare() [ext/intl/tests/collator_compare.phpt]
+
+→ロケールを意識した文字列比較を行うテスト
+
+×collator_get_sort_key() [ext/intl/tests/collator_get_sort_key.phpt]
+
+→ロケールと値を渡してキーを算出するテスト
+
+×IntlDateFormatter::create() with default date and time types [ext/intl/tests/dateformat_create_default.phpt]
+
+→引数に国を指定してIntlDateFormatterのインスタンスを作り、インスタンスメソッドで日時を整形する。
+(国に応じたフォーマットの日時に整形する。)
+
+×datefmt_format_code() with relative formats [ext/intl/tests/dateformat_format_relative.phpt]
+
+→日付にRELATIVE_FULL,RELATIVE_LONG,RELATIVE_MEDIUM,RELATIVE_SHORTを指定して日付が整形されるかテスト。
+ (どれを選んだ場合でも昨日はyesterday、今日はtoday、明日はtomorrowで表示されることと、それ以外の場合は指定に応じた長さで表示されることをテスト。)
+
+×IntlDatePatternGenerator::getBestPattern(): clone [ext/intl/tests/datepatterngenerator_clone.phpt]
+
+→日付パターンの生成(テストはドイツで生成)して日付フォーマットをエコー
+ また生成したオブジェクトをクローンして同じくエコー
+ (期待値は同じ。)
+
+×IntlDatePatternGenerator::getBestPattern() [ext/intl/tests/datepatterngenerator_get_best_pattern.phpt]
+
+→日付フォーマットの整形を行う+引数を渡さなかった場合のエラーハンドリングテスト
+
+×spoofchecker with locale settings [ext/intl/tests/spoofchecker_003.phpt]
+
+→ロケールに応じた日付チェックを行う。
+
+☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆
+
+×int openssl_x509_checkpurpose ( mixed $x509cert , int $purpose [, array $cainfo = array() [, string $untrustedfile ]] ) function [ext/openssl/tests/openssl_x509_checkpurpose_basic.phpt]
+
+→証明書と正しい秘密鍵を渡した場合のみ、クライアント側から通信できるかを確認。
+ (テストにおける鍵のディレクトリ構成は正しかった、、)
+ 後で証明書設定を行えば通信できるか確認。
+ 
+×Multicast support: IPv6 receive options [ext/sockets/tests/mcast_ipv6_recv.phpt]
+
+→ipv6は使用しないため対応しない。
+
+×SQLite3 extended error code Function [ext/sqlite3/tests/sqlite3_38_extended_error.phpt]
+　→拡張エラーコードが出るか確認している。
+ 　まったく同じ行を2回insertして主キー重複でエラーを出している。
+    エラー：19(SQLステートメントで制約違反が発生)
+  　拡張：1555(PRIMARY KEY制約が失敗しました。)
+
+    
+  →アプリケーションではMySQLを使用し、MySQLはエラーコード設定を行っているため何もしない。
+   (sqliteはとりあえずはいってはいるが何も設定していないため後で設定すればパスするかも、、）
+
+×SQLite3 enable Extended Error Result Codes [ext/sqlite3/tests/sqlite3_39_toggleExtended.phpt]
+
+　→↑と同一の事象および理由により対応しない。
+ 
+ [admin@localhost php-8.1.1]$ sudo make install
+ →インストールを実行
+ 
+ ～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+ libtool: warning: remember to run 'libtool --finish /usr/local/src/php-8.1.1/libs'
+ ～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+ 
+  →警告で、「libtool --finish /usr/local/src/php-8.1.1/libs」を実行するよう記載あり。
+ 
+ [admin@localhost php-8.1.1]$ echo $?
+0
+
+  →インストールは正常終了
+
+[admin@localhost php-8.1.1]$ libtool --finish /usr/local/src/php-8.1.1/libs
+ 
+ libtool --finish：以下2つの機能がある。
+ 1.ライブラリの配置や参照(環境変数に追加)をする。
+ 2.古いバージョンのツールと一緒に使用することができる？(簡単にする？)
+
+ 参考サイト
+ [Man page of LIBTOOL](https://linuxjm.osdn.jp/html/gnumaniak/man1/libtool.1.html)
+ [Libtool: Finish mode](https://www.gnu.org/software/libtool/manual/html_node/Finish-mode.html)
+ 
+ libtool: finish: PATH="/usr/local/mysql/bin:/usr/local/apache2/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/admin/.local/bin:/home/admin/bin:/sbin" ldconfig -n /usr/local/src/php-8.1.1/libs
+----------------------------------------------------------------------
+Libraries have been installed in:
+   /usr/local/src/php-8.1.1/libs
+
+If you ever happen to want to link against installed libraries
+in a given directory, LIBDIR, you must either use libtool, and
+specify the full pathname of the library, or use the `-LLIBDIR'
+flag during linking and do at least one of the following:
+   - add LIBDIR to the `LD_LIBRARY_PATH' environment variable
+     during execution
+   - add LIBDIR to the `LD_RUN_PATH' environment variable
+     during linking
+   - use the `-Wl,-rpath -Wl,LIBDIR' linker flag
+   - have your system administrator add LIBDIR to `/etc/ld.so.conf'
+
+See any operating system documentation about shared libraries for
+more information, such as the ld(1) and ld.so(8) manual pages.
+
+→環境変数PATHに追記して、/usr/local/src/php-8.1.1/libsにライブラリを配置していることを確認。
+ 
+ [admin@localhost php-8.1.1]$ less /usr/local/apache2/conf/httpd.conf
+ LoadModule php_module         modules/libphp.so
+ 
+ →apacheのconfigファイルに生成されたlibphp.soが読み込まれていることを確認。
+ 
+[admin@localhost conf]$ diff /usr/local/src/php-8.1.1/php.ini-development /usr/local/src/php-8.1.1/php.ini-production
+86c86
+< ; This is the php.ini-development INI file.
+---
+> ; This is the php.ini-production INI file.
+379c379
+< zend.exception_ignore_args = Off
+---
+> zend.exception_ignore_args = On
+387c387,389
+< zend.exception_string_param_max_len = 15
+---
+> ; In production, it is recommended to set this to 0 to reduce the output
+> ; of sensitive information in stack traces.
+> zend.exception_string_param_max_len = 0
+484c486
+< error_reporting = E_ALL
+---
+> error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT
+501c503
+< display_errors = On
+---
+> display_errors = Off
+510c512
+< display_startup_errors = On
+---
+> display_startup_errors = Off
+1204c1206
+< mysqlnd.collect_memory_statistics = On
+---
+> mysqlnd.collect_memory_statistics = Off
+1577c1579
+< zend.assertions = 1
+---
+> zend.assertions = -1
+1887c1889
+< ;opcache.huge_code_pages=0
+---
+> ;opcache.huge_code_pages=1
+> 
+
+ [admin@localhost conf]$ sudo cp /usr/local/src/php-8.1.1/php.ini-development /usr/local/lib/php.ini
+
+以下2つのiniファイルがあるが、developmentを選定
+
+php.ini-development(開発用)
+php.ini-production(本番用)
+
+参考)
+開発用と本番用の違い、、、
+本番用は機密情報の流出を防ぐために機能がセーブされている。
+(スタックトレースに引数を渡さないようにしていたり、出力するエラー内容を文法関連に制限したり、、、)
+
+
+ [admin@localhost conf]$ sudo sed -i '522i <FilesMatch \.php$>\n    SetHandler application/x-httpd-php\n</FilesMatch>' httpd.conf
+ 
+→apacheが「.php」拡張子のファイルをphpプログラムとしてパースするよう以下設定をhttpd.conf最後に追記
+
+<FilesMatch \.php$>
+    SetHandler application/x-httpd-php
+</FilesMatch>
+
+→ブラウザ表示まで確認
