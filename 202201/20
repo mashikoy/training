@@ -1,0 +1,268 @@
+[2022/1/20]研修タスクまとめ
+
+・大枠
+1.xdebugを導入(pecl)
+
+
+・実作業内容
+
+peclとは、、、
+[PHP: PECL インストール入門 - Manual](https://www.php.net/manual/ja/install.pecl.intro.php)
+[PECLをインストールする \| Unskilled?](https://unskilled.site/pecl%E3%82%92%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%AB%E3%81%99%E3%82%8B/)
+
+xdebugとは、、、
+[PHP開発者がいまさら聞けない、Xdebugの基礎の基礎 – WPJ](https://www.webprofessional.jp/getting-know-love-xdebug/)
+
+※前のバージョンではデフォルトではいっていたが、新しいバージョン(7.4以降？)では--with-pearをつける必要あり。
+　今回のインストール時指定していなかったため、別途インストール
+
+[admin@localhost ~]$ yum list *php-pear*
+
+[admin@localhost ~]$ sudo yum install php81-php-pear.noarch　※remiリポジトリ
+
+ ※結果として、2種類のphpがはいった。(混在)
+
+→peclのインストールを実施。
+
+[admin@localhost ~]$ sudo sed -i -e "s|PATH=/usr/local/mysql/bin:/usr/local/apache2/bin:$\PATH|PATH=/usr/local/mysql/bin:/usr/local/apache2/bin:/opt/remi/php81/root/usr/bin:$\PATH|" /etc/profile
+
+[admin@localhost ~]$ which pecl
+/opt/remi/php81/root/usr/bin/pecl
+
+→インストールしたpcreのパスを通す。
+
+参考)linux起動時のファイル読み込み順序について
+[Linuxで環境変数を永続化させる方法と手順について – Rainbow Engine](https://rainbow-engine.com/linux-envvar-permanent/)
+
+[admin@localhost ~]$ pecl install xdebug
+WARNING: channel "pecl.php.net" has updated its protocols, use "pecl channel-update pecl.php.net" to update
+Cannot install, php_dir for channel "pecl.php.net" is not writeable by the current user
+→pecl.php.netのプロトコルを更新するよう記載あり。
+
+[admin@localhost ~]$ sudo pecl channel-update pecl.php.net
+Updating channel "pecl.php.net"
+Update of Channel "pecl.php.net" succeeded
+
+→プロトコルを更新
+
+[admin@localhost ~]$ sudo pecl install xdebug
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+Can't find PHP headers in /opt/remi/php81/root/usr/include/php
+The php81-php-devel package is required for use of this command.
+ERROR: `phpize' failed
+
+→headerが読み込めないため、php81-php-develが必要である旨記載あり。
+
+[admin@localhost ~]$ sudo yum install php81-php-devel
+
+→php81-php-develを導入
+
+[admin@localhost ~]$ sudo pecl install xdebug
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+  +----------------------------------------------------------------------+
+  |                                                                      |
+  |   INSTALLATION INSTRUCTIONS                                          |
+  |   =========================                                          |
+  |                                                                      |
+  |   See https://xdebug.org/install.php#configure-php for instructions  |
+  |   on how to enable Xdebug for PHP.                                   |
+  |                                                                      |
+  |   Documentation is available online as well:                         |
+  |   - A list of all settings:  https://xdebug.org/docs-settings.php    |
+  |   - A list of all functions: https://xdebug.org/docs-functions.php   |
+  |   - Profiling instructions:  https://xdebug.org/docs-profiling2.php  |
+  |   - Remote debugging:        https://xdebug.org/docs-debugger.php    |
+  |                                                                      |
+  |                                                                      |
+  |   NOTE: Please disregard the message                                 |
+  |       You should add "extension=xdebug.so" to php.ini                |
+  |   that is emitted by the PECL installer. This does not work for      |
+  |   Xdebug.                                                            |
+  |                                                                      |
+  +----------------------------------------------------------------------+
+  ～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+    install ok: channel://pecl.php.net/xdebug-3.1.2
+configuration option "php_ini" is not set to php.ini location
+You should add "zend_extension=/opt/remi/php81/root/usr/lib64/php/modules/xdebug.so" to php.ini
+
+[admin@localhost ~]$ echo $?
+0
+
+→xdebugのインストールが完了。php.iniに以下を追記するよう記載あり。
+
+"zend_extension=/opt/remi/php81/root/usr/lib64/php/modules/xdebug.so"
+
+[admin@localhost ~]$ sed -e '$ i zend_extension=/usr/local/lib/php/extensions/no-debug-non-zts-20210902/xdebug.so'  /usr/local/lib/php.ini
+[admin@localhost ~]$ less /usr/local/lib/php.ini
+
+→php.iniの末尾に追記。
+
+[admin@localhost ~]$ php -i | grep xdebug
+
+→何も表示されない。
+
+[admin@localhost ~]$ php --ini
+Configuration File (php.ini) Path: /etc/opt/remi/php81
+
+→読み込んでいるiniファイルの位置を確認したら、想定と違うディレクトリを参照していた。
+
+(期待値)
+/usr/local/lib/
+
+(実際)
+/etc/opt/remi/php81
+
+
+PHPIniDir "/usr/local/lib/"
+
+→今回はapacheのモジュールとして組み込んでいるため、httpd.confに設定を追加する。
+ (公式サイトによると、読み込み優先度が一番高い。)
+
+参考）php.iniの読み取り順序について
+https://www.php.net/manual/ja/configuration.file.php
+
+[admin@localhost my_php]$ sudo mkdir my_php
+[admin@localhost my_php]$ sudo cp /usr/local/lib/php.ini /etc/opt/my_php
+
+→読み込み場所が先ほどと変わらない。
+php.iniはディレクトリの50音順に探していくらしいので、/etc/opt/にmy_phpというディレクトリを作成して、そこにphp.iniを配置
+
+
+★remiのpecl使用をやめるため、本日の作業の逆順にアンインストールを実施。
+ しかしiniファイルの読み込み場所など変わらないため再度MySQL構築時点のサーバからビルドを実施。
+ 
+ ★今回はpcreコマンドを使えるように--with-pearもつけてmakefileを作成
+ 
+ [admin@localhost ~]$ which pecl
+/usr/local/bin/pecl
+ 
+ →peclコマンドが使用できることを確認。
+ 
+ [admin@localhost ~]$ sudo pecl install xdebug
+ 
+ ～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+   +----------------------------------------------------------------------+
+  |                                                                      |
+  |   INSTALLATION INSTRUCTIONS                                          |
+  |   =========================                                          |
+  |                                                                      |
+  |   See https://xdebug.org/install.php#configure-php for instructions  |
+  |   on how to enable Xdebug for PHP.                                   |
+  |                                                                      |
+  |   Documentation is available online as well:                         |
+  |   - A list of all settings:  https://xdebug.org/docs-settings.php    |
+  |   - A list of all functions: https://xdebug.org/docs-functions.php   |
+  |   - Profiling instructions:  https://xdebug.org/docs-profiling2.php  |
+  |   - Remote debugging:        https://xdebug.org/docs-debugger.php    |
+  |                                                                      |
+  |                                                                      |
+  |   NOTE: Please disregard the message                                 |
+  |       You should add "extension=xdebug.so" to php.ini                |
+  |   that is emitted by the PECL installer. This does not work for      |
+  |   Xdebug.                                                            |
+  |                                                                      |
+  +----------------------------------------------------------------------+
+   ～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+   Build process completed successfully
+Installing '/usr/local/lib/php/extensions/no-debug-non-zts-20210902/xdebug.so'
+install ok: channel://pecl.php.net/xdebug-3.1.2
+configuration option "php_ini" is not set to php.ini location
+You should add "zend_extension=/usr/local/lib/php/extensions/no-debug-non-zts-20210902/xdebug.so" to php.ini
+[admin@localhost ~]$ echo $?
+0
+
+→インストールガイドとphp.iniに以下を追記するよう記載あり。
+zend_extension=/usr/local/lib/php/extensions/no-debug-non-zts-20210902/xdebug.so
+
+[admin@localhost ~]$ sudo pecl channel-update pecl.php.net
+Updating channel "pecl.php.net"
+Update of Channel "pecl.php.net" succeeded
+
+→途中pecl.php.netのチャネルを更新するよう警告が出ていたため実行。
+
+補足）pecl.php.netとは、、、
+PEARパッケージのパッケージ配布元のこと。
+新しいバージョンのphpを導入したため要求されたと思われる。
+
+参考サイト）
+[利用可能なチャネルの一覧(list-channels) - PEARコマンド - PEAR入門](https://www.javadrive.jp/pear/command/index7.html)
+
+[admin@localhost ~]$ php -ini
+
+Configuration File (php.ini) Path => /usr/local/lib
+Loaded Configuration File => /usr/local/lib/php.ini
+
+→/use/local/libのiniファイルを読み込んでいることを確認。
+
+[admin@localhost ~]$ sudo cp /usr/local/lib/php.ini /usr/local/lib/php.ini_bak
+  
+→修正前にバックアップを取得。
+
+[admin@localhost lib]$ sudo sed -i -e 's/$/\nzend_extension=\/usr\/local\/lib\/php\/extensions\/no-debug-non-zts-20210902\/xdebug.so\/' /usr/local/lib/php.ini
+↑間違えていてエラーがたくさん出た。
+↓正しい正規表現(今回はvimでなおしてしまった。)
+sed -e '$ i zend_extension=/usr/local/lib/php/extensions/no-debug-non-zts-20210902/xdebug.so' /usr/local/lib/php.ini 
+
+[admin@localhost lib]$ sudo systemctl restart httpd
+
+→変更したiniファイルを読み込む
+ 
+ [admin@localhost ~]$ php -i | grep xdebug
+ xdebug
+Support Xdebug on Patreon, GitHub, or as a business: https://xdebug.org/support
+             Enabled Features (through 'xdebug.mode' setting)
+             
+→読み込めていることを確認(ブラウザのphpinfoでも確認。)
+
+
+sudo sed -e '$ i xdebug.remote_enable = true' /usr/local/lib/php.ini 
+→リモートアクセスを可能にする。(VSCODEで接続するが、それはphp実行環境の外部のプログラムなので、リモートに値するらしい。)
+
+sudo sed -e '$ i xdebug.remote_host = "127.0.0.1"' /usr/local/lib/php.ini
+→ホストは同じため、localhostのipを指定
+
+sudo sed -e '$ i xdebug.remote_port = 9000' /usr/local/lib/php.ini
+→通常9000で指定するらしい。
+
+[php.iniのxdebugの設定値を理解する \| hara-chan.com](https://hara-chan.com/it/programming/php-ini-xdebug-definition/#2_xdebugremote_enable)
+https://xdebug.org/docs/install#configure-php
+
+[admin@localhost lib]$ sudo systemctl restart httpd
+
+https://suzuyosy.com/index.php/2019/08/31/post-674/
+
+[VSCODE作業]
+1.PHP DEBUGをインストール
+2.launch.jsonの作成
+
+↓このエラーが出る。
+'launch.json' ファイルを '.vscode' フォルダー (ファイル 'vscode-remote://ssh-remote+192.168.56.109/usr/local/.vscode/launch.json' を書き込むことができません (NoPermissions (FileSystemError): Error: EACCES: permission denied, mkdir '/usr/local/.vscode')) 内に作成できません。
+
+[admin@localhost usr]$ ls -ltr
+～～～～～～～～～～～～～～～～～～～～～～～～～～～
+drwxr-xr-x.  18 root root   203  1月 20 16:47 local
+
+[admin@localhost usr]$ sudo chmod o+w /usr/local
+→一時的にo(other)に書き込み権限を付与
+
+[admin@localhost usr]$ ls -ltr
+～～～～～～～～～～～～～～～～～～～～～～～～～～～
+drwxr-xrwx.  18 root root   203  1月 20 16:47 local
+
+[admin@localhost local]$ ls -la
+～～～～～～～～～～～～～～～～～～～～～～～～～～～
+drwxrwxr-x.  2 admin admin   25  1月 20 18:27 .vscode
+
+[admin@localhost .vscode]$ ls -l
+合計 4
+-rw-rw-r--. 1 admin admin 1548  1月 20 18:27 launch.json
+
+→launch.jsonができていることを確認。
+
+[admin@localhost htdocs]$ sudo chmod o+w+x ./sample_xdebug.php
+
+→実行するPGMに実行と書き込み権限をつけておく。
+
+↑1/20ここまで--------------------------------------------------------------------------------------------------------
