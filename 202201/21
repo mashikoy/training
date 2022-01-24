@@ -1,0 +1,418 @@
+[2022/1/21]研修タスクまとめ
+
+・大枠
+1.xdebugを導入(pecl)
+2.guzzleを導入(phar)
+3.wordpressを導入
+
+・前提知識：peclとpharの違いについて
+
+  pecl(PHP Extension Community Library):
+  PECL（ピクル、PHP Extension Community Library）は、PHPで利用できる拡張ライブラリ（パッケージ）を提供しているサービス。
+
+PECLで提供されるライブラリはCで記述されているため、PHPで記述されたPEARのライブラリよりも高速に動作する。PECLにより提供されるライブラリはPHPの拡張モジュールとしてインストールされる。一方で、PEARライブラリはPHPのバージョンアップに伴う再インストールが原則として不要なのに対し、PECL拡張モジュールはPHP内部のAPIに依存する部分があるため、PHPのバージョンアップに伴いAPIが変更された場合は再コンパイルを必要とする。
+
+PECLのインストール用には、PEAR同様に「pecl」コマンドが提供されている。インストール方法もほぼPEARと同じだが、インストール後に設定ファイル（php.ini）の「extension」でインストールしたモジュールを指定する必要がある点が異なる。なおWindows版では、手動でphp.iniを修正して、あらかじめコンパイル済みのPECL DLLを組み込むのが一般的な方法である。
+[PECL - Wikipedia](https://ja.wikipedia.org/wiki/PECL)
+
+  phar(PHPアーカイブファイル):
+  PHPのアプリケーション全体を一つのアーカイブファイルにまとめたもの。 
+ [PHP: はじめに - Manual](https://www.php.net/manual/ja/intro.phar.php)
+
+
+
+・実作業内容
+
+★launch.jsonの設定方法について
+
+name:わかりやすいものを適当に、、
+type:言語(今回はphp)
+request：
+  launch:デバッグ時にプログラムを起動。　※今回はブラウザアクセスなのでこっちを選択
+  attach:既に起動しているプログラムにデバッガーをアタッチ。
+port:デバッグで使用するポート
+stopOnEntry:trueにするとプログラム起動直後にデバッグ。少しずつソースを読み込んで実行していける。
+sourceMaps:コンパイル前とコンパイル後の対応関係を記述したファイル。
+           phpはインタプリタなので、設定しない??
+pathMappings:サーバとローカルのパスの対応付けを設定。vscodeでサーバに接続して実行しているため、設定不要？
+
+[��2��@Visual Studio Code�̃f�o�b�O�\���t�@�C���̊�{�FNode.js�ҁF���W�FVisual Studio Code�f�o�b�O����i1/3 �y�[�W�j - ��IT](https://atmarkit.itmedia.co.jp/ait/articles/1708/04/news027.html)
+
+php.iniの見直し
+
+★xdebugバージョン3系について (今回導入したバージョンは3.1.2)
+2系までと違い、3系ではXdebugを特定のモードにし、 xdebug.start_with_requestと組み合わせることによって設定していく。
+(意味のない設定同士の組み合わせでactiveになり、余計なオーバーヘッドを生み出さないため？？)
+
+[admin@localhost local]$ sudo sed -i -e '$ i xdebug.client_host=10.0.2.2' /usr/local/lib/php.ini
+→xdebugのクライアントホストの設定。
+ xdebugからVSCODEに接続する際に使用するIPを指定。
+ virtualboxだと10.0.2.2をGatewayとして使用するため、virtualboxだとほぼデフォルト扱い。
+ 
+＜参考：仮想環境のルートテーブル＞
+ [admin@localhost local]$ route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         10.0.2.2        0.0.0.0         UG    100    0        0 enp0s3　★
+10.0.2.0        0.0.0.0         255.255.255.0   U     100    0        0 enp0s3
+192.168.56.0    0.0.0.0         255.255.255.0   U     101    0        0 enp0s8
+192.168.122.0   0.0.0.0         255.255.255.0   U     0      0        0 virbr0
+
+
+[admin@localhost local]$ sudo sed -i -e '$ i xdebug.mode=debug' /usr/local/lib/php.ini
+→xdebug2の以下設定が、xdebug3ではこれ一行で済むらしい。(上記「★xdebugバージョン3系について」を参照)
+
+※step debugのみを実行する場合。
+(開発用)xdebug.remote_enable=1：リモートデバッグの有効/無効
+(開発用)xdebug.default_enable=0：エラーが出た時のスタックトレース表示の有効/無効
+(リファクタ用)xdebug.profiler_enable=0：プロファイリングの有効/無効
+(開発用)xdebug.auto_trace=0：トレース機能の有効/無効
+(テスト用)xdebug.coverage_enable=0：テストのカバレッジの有効/無効
+
+[admin@localhost local]$ sudo sed -i -e '$ i xdebug.start_with_request=yes' /usr/local/lib/php.ini
+
+補足）
+XDEBUG_SESSION_START=xxx というパラメータを付けてアクセスすると、はじめて Xdebug のリモート・セッションが ON になる。
+php.iniに以下設定をするとパラメータ不要に、、、
+xdebug.start_with_request=yes
+　※2系ではxdebug.remote_autostart=1
+
+※リモートセッション(XDEBUG_REMOTE_SESSION)はcookieに保存されるため、cookieの有効期間中がリモートセッションがつづく。
+XDEBUG_SESSION_STOPをつけて明示的に終了させるか、xdebug.remote_cookie_expire_timeパラメータ(初期値3600)を設定することによって有効期限を設定することも可能。
+
+xdebugのセッション開始モードは以下2つがある。
+req(上記のやり方)
+jit(エラーが所持たら開始する。onにすると必ずセッション確立する。)
+
+今回はreq
+
+参考サイト
+[Xdebug options explained — Devilbox 1.0 documentation](https://devilbox.readthedocs.io/en/latest/intermediate/configure-php-xdebug/php-xdebug-options.html#default-enable)
+
+[[PHP] Xdebug のリモートデバッグ、理解していますか？ - Qiita](https://qiita.com/castaneai/items/d5fdf577a348012ed8af)
+
+[Xdebug: Documentation » Step Debugging](https://xdebug.org/docs/step_debug)
+
+
+★最終的な設定内容
+[admin@localhost local]$ less /usr/local/lib/php.ini
+
+[xdebug](★：新規追加した行)
+zend_extension=/usr/local/lib/php/extensions/no-debug-non-zts-20210902/xdebug.so
+xdebug.remote_host="127.0.0.1"
+xdebug.remote_port=9003
+★xdebug.client_host=10.0.2.2
+★xdebug.mode=debug
+★xdebug.start_with_request=yes
+
+[admin@localhost local]$ sudo systemctl restart httpd
+
+→apacheのサービス再起動
+
+VSCODEの設定(特に設定は変えていない。)
+
+    "configurations": [
+        {
+            "name": "Listen for Xdebug",
+            "type": "php",
+            "request": "launch",
+            "port": 9003,
+            "stopOnEntry": true,
+            "pathMappings": {
+                "${workspaceRoot}": "${workspaceRoot}"
+            }
+        },
+
+→これでしばらく動かなかったが、VSCODE側でremote developmentを導入したら動いた。
+ (今まではremote sshで動かしていた。)
+  今までremote sshのみインストールしており、remote developmentのdebug機能が使えていなかった、、？
+ 
+ [Visual Studio Code Remote Development](https://code.visualstudio.com/docs/remote/remote-overview)
+ 
+ Debug an application running somewhere else such as a customer site or in the cloud.
+ 
+
+・guzzleを導入(phar)
+
+pharアーカイブの使用方法について
+[PHP: Phar アーカイブの使用法: 導入 - Manual](https://www.php.net/manual/ja/phar.using.intro.php)
+
+[admin@localhost bin]$ sudo sed -i "s/xdebug.mode=debug/;xdebug.mode=debug/g" /usr/local/lib/php.ini
+[admin@localhost lib]$ sed -i "s/;xdebug.mode=off/xdebug.mode=off/g" /usr/local/lib/php.ini
+
+→一度xdebugモードをoffに変更する。
+
+[admin@localhost lib]$ sudo systemctl restart httpd
+
+　※下のsedコマンドを実行した際にエラーになったため、visudoで編集(コメントを外しただけ。)
+ sed: 一時ファイル /usr/local/lib/sedQHO9Lc を開くことができませんでした: 許可がありません
+
+→xdebugをoffにしてapache再起動
+
+
+・compose.pharを導入(guzzle推奨)
+
+　※以下compose公式サイトのコマンドをそのまま使用
+
+[admin@localhost src]$ php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+
+→インストーラをコピー
+
+phpコマンドラインオプションについて
+[PHP: オプション - Manual](https://www.php.net/manual/ja/features.commandline.options.php)
+  -r <code>        Run PHP <code> without using script tags <?..?>
+
+[admin@localhost src]$ sudo php -r "if (hash_file('sha384', 'composer-setup.php') === '906a84df04cea2aa72f40b5f787e49f22d4c2f19492
+ac310e8cba5b96ac8b64115ac402c8cd292b8a03482574915d1a8') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('co
+mposer-setup.php'); } echo PHP_EOL;"
+
+Installer verified
+
+→composer-setup.phpをsha384でハッシュ値を出し、'906a84df04cea2aa72f40b5f787e49f22d4c2f19492
+ac310e8cba5b96ac8b64115ac402c8cd292b8a03482574915d1a8'と一致しているか検証
+
+'verified'と表示されたため、そのままインストール作業を継続
+
+[admin@localhost src]$ sudo php composer-setup.php
+
+→セットアップ用スクリプトを実行。
+
+　中身について、、、
+     OSに応じて証明書をダウンロードするディレクトリを変える。
+     PHPにて使用するopensslがtls1.1か1.2ｗｐサポートしているか
+     xdebugがはいってるか。(はいってると遅くなる旨echoする。)
+     必要な拡張モジュールのチェック
+     公開鍵の取得
+     
+     など、、、
+
+Composer (version 2.2.4) successfully installed to: /usr/local/src/composer.phar
+Use it: php composer.phar
+
+[admin@localhost src]$ php -r "unlink('composer-setup.php');"
+
+→セットアップ用スクリプトを削除
+
+[admin@localhost src]$ php composer.phar
+
+   ______
+  / ____/___  ____ ___  ____  ____  ________  _____
+ / /   / __ \/ __ `__ \/ __ \/ __ \/ ___/ _ \/ ___/
+/ /___/ /_/ / / / / / / /_/ / /_/ (__  )  __/ /
+\____/\____/_/ /_/ /_/ .___/\____/____/\___/_/
+                    /_/
+Composer version 2.2.4 2022-01-08 12:30:42
+
+→composer.pharが使用できることを確認
+
+[admin@localhost src]$ sudo mv composer.phar /usr/local/bin/com_phar
+
+→/usr/local/binに移動
+
+[admin@localhost src]$ sudo com_phar require guzzlehttp/guzzle
+
+[admin@localhost src]$ com_phar show
+guzzlehttp/guzzle             7.4.1  Guzzle is a PHP HTTP client library
+guzzlehttp/promises           1.5.1  Guzzle promises library
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+
+→composer.pharでguzzleを導入
+
+[admin@localhost htdocs]$ sudo vim guzzle_test.php
+
+→サンプルプログラムを作成。
+
+
+・プログラム中身
+[admin@localhost htdocs]$ less guzzle_test.php
+
+<?php
+require_once '/usr/local/src/vendor/autoload.php';
+
+$client = new GuzzleHttp\Client();
+$res = $client->request('GET', 'https://www.amazon.co.jp/gp/bestsellers/books/466298');
+
+$methods = get_class_methods($res);
+      foreach ( $methods as $m_name ) {
+        echo $m_name . "\n";
+      }
+//echo $res->getBody() . PHP_EOL;
+echo "getStatusCode" . $res->getStatusCode() . PHP_EOL;
+echo "getReasonPhrase" . $res->getReasonPhrase() . PHP_EOL;
+?>
+
+
+
+↓guzzleソース(リクエスト飛ばすところ)------------------------------------------------------
+
+★Client.php
+
+    public function request(string $method, $uri = '', array $options = []): ResponseInterface
+    {
+        $options[RequestOptions::SYNCHRONOUS] = true;
+        return $this->requestAsync($method, $uri, $options)->wait();
+    }
+    
+    
+    public function requestAsync(string $method, $uri = '', array $options = []): PromiseInterface
+    {
+        $options = $this->prepareDefaults($options);
+        // Remove request modifying parameter because it can be done up-front.
+        $headers = $options['headers'] ?? [];
+        $body = $options['body'] ?? null;
+        $version = $options['version'] ?? '1.1';
+        // Merge the URI into the base URI.
+        $uri = $this->buildUri(Psr7\Utils::uriFor($uri), $options);　　　※1
+        if (\is_array($body)) {
+            throw $this->invalidBody();
+        }
+        $request = new Psr7\Request($method, $uri, $headers, $body, $version);
+        // Remove the option so that they are not doubly-applied.
+        unset($options['headers'], $options['body'], $options['version']);
+
+        return $this->transfer($request, $options);
+    }
+    
+    ※1 buildUri、、、
+    Request.phpでURIの組み立てを行っている。
+     (バリデーションも実施。)
+    
+        private function transfer(RequestInterface $request, array $options): PromiseInterface
+    {
+        $request = $this->applyOptions($request, $options);
+        /** @var HandlerStack $handler */
+        $handler = $options['handler'];
+
+        try {
+            return P\Create::promiseFor($handler($request, $options));
+        } catch (\Exception $e) {
+            return P\Create::rejectionFor($e);
+        }
+    }
+    
+    
+★Create.php
+promiseとは、、、非同期通信
+非同期通信するオブジェクトを作る。
+    
+        public static function promiseFor($value)
+    {
+        if ($value instanceof PromiseInterface) {
+            return $value;
+        }
+
+        // Return a Guzzle promise that shadows the given promise.
+        if (is_object($value) && method_exists($value, 'then')) {
+            $wfn = method_exists($value, 'wait') ? [$value, 'wait'] : null;
+            $cfn = method_exists($value, 'cancel') ? [$value, 'cancel'] : null;
+            $promise = new Promise($wfn, $cfn);
+            $value->then([$promise, 'resolve'], [$promise, 'reject']);
+            return $promise;
+        }
+
+        return new FulfilledPromise($value);
+    }
+
+Promise.phpでキューの制御を行う。
+(キューに入れたり走らせたり。。)
+
+→リクエストした値を取り出せることを確認。
+
+
+・wordpressのインストール
+
+[admin@localhost src]$ sudo curl -LO https://ja.wordpress.org/latest-ja.tar.gz
+[admin@localhost src]$ sudo tar xzfv latest-ja.tar.gz
+
+[admin@localhost src]$ ls -l
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+drwxr-xr-x.  5  1006  1006      4096  1月  7 06:11 wordpress
+
+→wordpressをダウンロード
+
+
+[admin@localhost src]$ mysql -u root -
+mysql> create database wordpress;
+Query OK, 1 row affected (0.02 sec)
+
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
+| wordpress          |
+| world              |
++--------------------+
+6 rows in set (0.01 sec)
+
+→wordpress用データベースを作成
+
+mysql> create user wp_usr identified by 'wp_1234'
+    -> ;
+Query OK, 0 rows affected (0.03 sec)
+
+mysql> grant all privileges on wordpress.* to wp_usr;
+Query OK, 0 rows affected (0.02 sec)
+
+mysql> flush privileges;
+Query OK, 0 rows affected (0.01 sec)
+
+→wordpress用ユーザを作成し、wordpressデータベースに対する操作権限を付与
+
+・wordpressの設定ファイル修正
+
+[admin@localhost wordpress]$ sudo sed -i "s/'database_name_here'/'wordpress'/g" /usr/local/src/wordpress/wp-config.php
+
+[admin@localhost wordpress]$ sudo sed -i "s/'username_here'/'wp_usr'/g" /usr/local/src/wordpress/wp-config.php
+
+[admin@localhost wordpress]$ sudo sed -i "s/'password_here'/'wp_1234'/g" /usr/local/src/wordpress/wp-config.php
+
+[admin@localhost wordpress]$ sudo sed -i "s/'localhost'/'localhost:\/tmp\/mysql\.sock'/g" /usr/local/src/wordpress/wp-config.php
+ 
+ 　※ローカルで接続しにいくことを想定しているので、socketファイルの場所を指定
+ 
+[admin@localhost wordpress]$ sudo sed -i "s/'utf8'/'utf8mb4'/g" /usr/local/src/wordpress/wp-config.php
+ 
+ 　※データベースの照合順序はMySQLによって自動で割り当てられるためそのまま
+
+→MySQLの設定
+
+   ※認証用ユニークキーは以下サイトで生成されたものをvimでそのまま貼り付け
+   　[](https://api.wordpress.org/secret-key/1.1/salt/)
+
+   ※WordPress データベーステーブルの接頭辞はそのまま
+   
+[admin@localhost wordpress]$ sudo sed -i "s/define( 'WP_DEBUG', false );/define( 'WP_DEBUG', true );/g" /usr/local/src/wordpress/wp-config.php
+
+　→デバッグモードはon
+
+ [カスタム値：vimで追加]
+ define( 'WP_CACHE', true );
+
+→カスタム値は後から変更できるのでキャッシュだけ有効化しておく。
+ (URLなどもせってい可能。)
+
+ [wp-config.php の編集 – サポートフォーラム – WordPress.org 日本語](https://ja.wordpress.org/support/article/editing-wp-config-php/)
+ 
+ [admin@localhost wordpress]$ sudo mv /usr/local/src/wordpress /usr/local/apache2/htdocs/
+ 
+ →wordpressのディレクトリを以下の通り以降。
+ 
+ (移行前)
+ /usr/local/apache2/htdocs/
+ 
+ (移行後)
+ /usr/local/src/
+
+・ブラウザアクセス時、以下のログが吐かれ500エラーに、、、
+
+[admin@localhost logs]$ pwd
+/usr/local/apache2/logs
+[admin@localhost logs]$ tail -f error_log
+
+[Fri Jan 21 19:06:58.654423 2022] [php:error] [pid 7377] [client 10.0.2.2:52979] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'wordpress.wp_options' doesn't exist in /usr/local/apache2/htdocs/wordpress/wp-includes/wp-db.php:2056\nStack trace:\n#0 /usr/local/apache2/htdocs/wordpress/wp-includes/wp-db.php(2056): mysqli_query(Object(mysqli), 'SELECT option_v...')\n#1 /usr/local/apache2/htdocs/wordpress/wp-includes/wp-db.php(1945): wpdb->_do_query('SELECT option_v...')\n#2 /usr/local/apache2/htdocs/wordpress/wp-includes/wp-db.php(2581): wpdb->query('SELECT option_v...')\n#3 /usr/local/apache2/htdocs/wordpress/wp-includes/functions.php(1734): wpdb->get_var('SELECT option_v...')\n#4 /usr/local/apache2/htdocs/wordpress/wp-includes/load.php(752): is_blog_installed()\n#5 /usr/local/apache2/htdocs/wordpress/wp-settings.php(159): wp_not_installed()\n#6 /usr/local/apache2/htdocs/wordpress/wp-config.php(97): require_once('/usr/local/apac...')\n#7 /usr/local/apache2/htdocs/wordpress/wp-load.php(50): require_once('/usr/local/apac...')\n#8 /usr/local/apache2/htdocs/wordpress/wp-admin/install.php(36): require_once('/usr/local/apac...')\n#9 {main}\n  thrown in /usr/local/apache2/htdocs/wordpress/wp-includes/wp-db.php on line 2056
+
+↑21日ここまで-------------------------------------------------------------------------------------------------------------------------------
