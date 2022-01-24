@@ -1,0 +1,341 @@
+[2022/1/24]研修タスクまとめ
+
+・大枠
+1.wordpressを導入
+
+・実作業内容
+
+・wordpressのインストール
+
+[admin@localhost src]$ sudo curl -LO https://ja.wordpress.org/latest-ja.tar.gz
+[admin@localhost src]$ sudo tar xzfv latest-ja.tar.gz
+
+[admin@localhost src]$ ls -l
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+drwxr-xr-x.  5  1006  1006      4096  1月  7 06:11 wordpress
+
+→wordpressをダウンロード
+
+
+[admin@localhost src]$ mysql -u root -
+mysql> create database wordpress;
+Query OK, 1 row affected (0.02 sec)
+
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
+| wordpress          |
+| world              |
++--------------------+
+6 rows in set (0.01 sec)
+
+→wordpress用データベースを作成
+
+mysql> create user wp_usr identified by 'wp_1234'
+    -> ;
+Query OK, 0 rows affected (0.03 sec)
+
+mysql> grant all privileges on wordpress.* to wp_usr;
+Query OK, 0 rows affected (0.02 sec)
+
+mysql> flush privileges;
+Query OK, 0 rows affected (0.01 sec)
+
+→wordpress用ユーザを作成し、wordpressデータベースに対する操作権限を付与
+
+・wordpressの設定ファイル修正
+
+[admin@localhost wordpress]$ sudo sed -i "s/'database_name_here'/'wordpress'/g" /usr/local/src/wordpress/wp-config.php
+
+[admin@localhost wordpress]$ sudo sed -i "s/'username_here'/'wp_usr'/g" /usr/local/src/wordpress/wp-config.php
+
+[admin@localhost wordpress]$ sudo sed -i "s/'password_here'/'wp_1234'/g" /usr/local/src/wordpress/wp-config.php
+
+[admin@localhost wordpress]$ sudo sed -i "s/'localhost'/'localhost:\/tmp\/mysql\.sock'/g" /usr/local/src/wordpress/wp-config.php
+ 
+ 　※ローカルで接続しにいくことを想定しているので、socketファイルの場所を指定
+  ↑補足：指定しなくても接続できた。
+ 
+[admin@localhost wordpress]$ sudo sed -i "s/'utf8'/'utf8mb4'/g" /usr/local/src/wordpress/wp-config.php
+ 
+ 　※データベースの照合順序はMySQLによって自動で割り当てられるためそのまま
+
+→MySQLの設定
+
+   ※認証用ユニークキーは以下サイトで生成されたものをvimでそのまま貼り付け
+   　[](https://api.wordpress.org/secret-key/1.1/salt/)
+
+   ※WordPress データベーステーブルの接頭辞はそのまま
+   
+[admin@localhost wordpress]$ sudo sed -i "s/define( 'WP_DEBUG', false );/define( 'WP_DEBUG', true );/g" /usr/local/src/wordpress/wp-config.php
+
+　→デバッグモードはon
+
+ [カスタム値：vimで追加]
+ define( 'WP_CACHE', true );
+
+→カスタム値は後から変更できるのでキャッシュだけ有効化しておく。
+ (URLなども設定可能。)
+
+ [wp-config.php の編集 – サポートフォーラム – WordPress.org 日本語](https://ja.wordpress.org/support/article/editing-wp-config-php/)
+ 
+ [admin@localhost wordpress]$ sudo mv /usr/local/src/wordpress /usr/local/apache2/htdocs/
+ 
+ →今回はドメインのサブディレクトリにてサイトを表示させるため、
+  wordpressのディレクトリを以下の通り移行。
+ 
+ (移行前)
+ /usr/local/apache2/htdocs/
+ 
+ (移行後)
+ /usr/local/src/
+
+[admin@localhost htdocs]$ sudo mv  wordpress articles
+[admin@localhost htdocs]$ ls -ltr
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+drwxr-xr-x. 5 1006 1006 4096  1月 21 18:44 articles
+
+→ディレクトリ名を任意の名前に変更
+
+・ブラウザアクセス時、以下のログが吐かれ500エラーに、、、
+(http://localhost:8088/articles/wp-admin/install.php)
+
+[admin@localhost logs]$ pwd
+/usr/local/apache2/logs
+[admin@localhost logs]$ tail -f error_log
+
+[Mon Jan 24 14:42:37.420869 2022] [php:error] [pid 1470] [client 10.0.2.2:64159] PHP Fatal error:  Uncaught mysqli_sql_exception: Table 'wordpress.wp_options' doesn't exist in /usr/local/apache2/htdocs/articles/wp-includes/wp-db.php:2056\nStack trace:\n#0 /usr/local/apache2/htdocs/articles/wp-includes/wp-db.php(2056): mysqli_query(Object(mysqli), 'SELECT option_v...')\n#1 /usr/local/apache2/htdocs/articles/wp-includes/wp-db.php(1945): wpdb->_do_query('SELECT option_v...')\n#2 /usr/local/apache2/htdocs/articles/wp-includes/wp-db.php(2581): wpdb->query('SELECT option_v...')\n#3 /usr/local/apache2/htdocs/articles/wp-includes/functions.php(1734): wpdb->get_var('SELECT option_v...')\n#4 /usr/local/apache2/htdocs/articles/wp-includes/load.php(752): is_blog_installed()\n#5 /usr/local/apache2/htdocs/articles/wp-settings.php(159): wp_not_installed()\n#6 /usr/local/apache2/htdocs/articles/wp-config.php(97): require_once('/usr/local/apac...')\n#7 /usr/local/apache2/htdocs/articles/wp-load.php(50): require_once('/usr/local/apac...')\n#8 /usr/local/apache2/htdocs/articles/wp-admin/install.php(36): require_once('/usr/local/apac...')\n#9 {main}\n  thrown in /usr/local/apache2/htdocs/articles/wp-includes/wp-db.php on line 2056
+
+[admin@localhost wordpress]$ sudo mv wp-config.php wp-config.php_bak
+
+→wp-configファイルがおかしい可能性があるため、リネームして画面表示してみる。
+
+→以下の通りインストール画面が表示される。
+---------------------------------------------------------------------
+WordPress へようこそ。作業を始める前にデータベースに関するいくつかの情報が必要となります。以下の項目を準備してください。
+
+データベース名
+データベースのユーザー名
+データベースのパスワード
+データベースホスト
+テーブル接頭辞 (1つのデータベースに複数の WordPress を作動させる場合)
+---------------------------------------------------------------------
+
+参考サイト：
+[【初心者です】ローカルでのWordPress環境構築エラー \| WordPress.org 日本語](https://ja.wordpress.org/support/topic/%E3%80%90%E5%88%9D%E5%BF%83%E8%80%85%E3%81%A7%E3%81%99%E3%80%91%E3%83%AD%E3%83%BC%E3%82%AB%E3%83%AB%E3%81%A7%E3%81%AEwordpress%E7%92%B0%E5%A2%83%E6%A7%8B%E7%AF%89%E3%82%A8%E3%83%A9%E3%83%BC/)
+
+
+フォームに通り記入し、「送信」を押下
+
+データベース名　　　　　：wordpress
+データベースのユーザー名：wp_usr
+データベースのパスワード：wp_1234
+データベースホスト　　　：localhost:/tmp/mysql.sock(localhostでも実施)
+テーブル接頭辞 　　　　　：wp_
+
+→「このサイトで重大なエラーが発生しました。」と表示
+
+●apacheログ
+
+[Mon Jan 24 16:01:51.608971 2022] [php:error] [pid 1473] [client 10.0.2.2:65142] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'wp_' in 'field list' in /usr/local/apache2/htdocs/articles/wp-includes/wp-db.php:2056\nStack trace:\n#0 /usr/local/apache2/htdocs/articles/wp-includes/wp-db.php(2056): mysqli_query(Object(mysqli), 'SELECT wp_')\n#1 /usr/local/apache2/htdocs/articles/wp-includes/wp-db.php(1945): wpdb->_do_query('SELECT wp_')\n#2 /usr/local/apache2/htdocs/articles/wp-admin/setup-config.php(317): wpdb->query('SELECT wp_')\n#3 {main}\n  thrown in /usr/local/apache2/htdocs/articles/wp-includes/wp-db.php on line 2056, referer: http://localhost:8088/articles/wp-admin/setup-config.php?step=1&language=ja
+
+●MySQLログ
+2022-01-24T07:01:51.608099Z        28 Connect   wp_usr@localhost on  using Socket
+2022-01-24T07:01:51.608380Z        28 Query     SELECT @@SESSION.sql_mode
+2022-01-24T07:01:51.608584Z        28 Query     SET SESSION sql_mode='NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'
+2022-01-24T07:01:51.608741Z        28 Init DB   wordpress
+2022-01-24T07:01:51.608852Z        28 Query     SELECT wp_
+
+
+
+
+mysql> select * from mysql.user\G
+*************************** 2. row ***************************
+                    Host: %
+                    User: wp_usr
+
+mysql> rename user 'wp_usr'@'%' to'wp_usr'@'localhost';
+Query OK, 0 rows affected (0.03 sec)
+
+mysql> select * from mysql.user\G
+*************************** 7. row ***************************
+                    Host: localhost
+                    User: wp_usr
+
+→ユーザのHostをlocalhostに変更
+
+→再度ブラウザアクセスするが、エラーに、、、
+
+[admin@localhost articles]$ sudo mv wp-config.php_bak wp-config.php
+
+→自作のconfigファイルを有効化して再度ブラウザアクセス&エラー
+
+●MySQLログ
+[admin@localhost etc]$ sudo less /var/log/mysql/general-query.log
+2022-01-24T06:50:02.643469Z        24 Connect   wp_usr@localhost on  using Socket
+2022-01-24T06:50:02.643834Z        24 Query     SET NAMES utf8mb4
+2022-01-24T06:50:02.644403Z        24 Query     SET NAMES 'utf8mb4' COLLATE 'utf8mb4_unicode_520_ci'
+2022-01-24T06:50:02.647768Z        24 Query     SELECT @@SESSION.sql_mode
+2022-01-24T06:50:02.647955Z        24 Query     SET SESSION sql_mode='NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'
+2022-01-24T06:50:02.648107Z        24 Init DB   wordpress
+2022-01-24T06:50:02.653147Z        24 Query     SELECT option_value FROM wp_options WHERE option_name = 'siteurl'
+2022-01-24T06:50:02.662060Z        24 Query     SELECT option_value FROM wp_options WHERE option_name = 'WPLANG' LIMIT 1
+
+→queryログを確認。
+ wp_usrでSQLを実行し、apacheのログと同様のエラーがでることを確認。
+
+mysql> use wordpress
+Database changed
+mysql> SELECT option_value FROM wp_options WHERE option_name = 'siteurl';
+ERROR 1146 (42S02): Table 'wordpress.wp_options' doesn't exist
+mysql> SELECT option_value FROM wp_options WHERE option_name = 'WPLANG' LIMIT 1;
+ERROR 1146 (42S02): Table 'wordpress.wp_options' doesn't exist
+
+→configファイル作成有無にかかわらずwordpress関係のテーブルができていないためエラーになっているため、設定の漏れがないか確認。
+ 
+ 
+[admin@localhost conf]$ sudo cp httpd.conf httpd.conf_bak2
+[admin@localhost conf]$ sudo vi httpd.conf
+
+→以下の通り修正(同じ設定が複数箇所あり、一か所のみ変更したかったためsedではなくvi)
+
+[admin@localhost conf]$ diff httpd.conf httpd.conf_bak2
+257c257
+<     AllowOverride All #after
+---
+>     AllowOverride None  #before
+
+※DocumentRoot "/usr/local/apache2/htdocs"
+<Directory "/usr/local/apache2/htdocs">
+～
+</Directory>
+の中のAllowOverrideの設定を変更し、htdocsディレクトリの中身を変更できるようにする。
+
+参考サイト
+
+htaccessとは、、、
+[【基本】.htaccessとは？何ができるの？書き方は？ - カゴヤのサーバー研究室](https://www.kagoya.jp/howto/it-glossary/web/htaccess/)
+
+ディレクティブとは、、、
+[�f�B���N�e�B�u�i�R���p�C���f�B���N�e�B�u�j�Ƃ� - IT�p�ꎫ�T e-Words](https://e-words.jp/w/%E3%83%87%E3%82%A3%E3%83%AC%E3%82%AF%E3%83%86%E3%82%A3%E3%83%96.html)
+
+
+[admin@localhost wordpress]$ sudo tar xzfv latest-ja.tar.gz
+
+[admin@localhost src]$ mv ./wordpress /usr/local/apache2/htdocs/
+
+→もう一度もってきたwordpressを解凍してきれいな状態でhtdocsに配置。
+ (前のフォルダがフォルダ名を変更しているため、競合しない。)
+ 
+ 
+→再度同じエラー
+
+●apacheエラー
+[Mon Jan 24 16:49:53.522921 2022] [php:error] [pid 5222] [client 10.0.2.2:49468] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'wp_' in 'field list' in /usr/local/apache2/htdocs/wordpress/wp-includes/wp-db.php:2056\nStack trace:\n#0 /usr/local/apache2/htdocs/wordpress/wp-includes/wp-db.php(2056): mysqli_query(Object(mysqli), 'SELECT wp_')\n#1 /usr/local/apache2/htdocs/wordpress/wp-includes/wp-db.php(1945): wpdb->_do_query('SELECT wp_')\n#2 /usr/local/apache2/htdocs/wordpress/wp-admin/setup-config.php(317): wpdb->query('SELECT wp_')\n#3 {main}\n  thrown in /usr/local/apache2/htdocs/wordpress/wp-includes/wp-db.php on line 2056, referer: http://localhost:8088/wordpress/wp-admin/setup-config.php?step=1&language=ja
+
+●Mysqlエラー
+2022-01-24T07:49:53.522054Z        36 Connect   wp_usr@localhost on  using Socket
+2022-01-24T07:49:53.522303Z        36 Query     SELECT @@SESSION.sql_mode
+2022-01-24T07:49:53.522539Z        36 Query     SET SESSION sql_mode='NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'
+2022-01-24T07:49:53.522697Z        36 Init DB   wordpress
+2022-01-24T07:49:53.522805Z        36 Query     SELECT wp_
+2022-01-24T07:49:53.534029Z        36 Quit
+
+[admin@localhost htdocs]$ sudo chown -R apache:apache wordpress
+
+→wordpressのディレクトリを丸々apacheユーザ：グループに所有させる。
+
+→同じエラー、、、
+
+mysql> SHOW GRANTS FOR wp_usr@localhost;
++---------------------------------------------------------------+
+| Grants for wp_usr@localhost                                   |
++---------------------------------------------------------------+
+| GRANT USAGE ON *.* TO `wp_usr`@`localhost`                    |
+| GRANT ALL PRIVILEGES ON `wordpress`.* TO `wp_usr`@`localhost` |
++---------------------------------------------------------------+
+2 rows in set (0.00 sec)
+
+→wp_usrにwordpress権限が付与されていることを確認。
+
+
+mysql> select User, Plugin from mysql.user where User = 'wp_usr';
++--------+-----------------------+
+| User   | Plugin                |
++--------+-----------------------+
+| wp_usr | caching_sha2_password |
++--------+-----------------------+
+1 row in set (0.00 sec)
+
+mysql> alter user 'wp_usr'@'localhost' identified with mysql_native_password by 'wp_1234';
+Query OK, 0 rows affected (0.02 sec)
+
+mysql> select User, Plugin from mysql.user where User = 'wp_usr';
++--------+-----------------------+
+| User   | Plugin                |
++--------+-----------------------+
+| wp_usr | mysql_native_password |
++--------+-----------------------+
+1 row in set (0.00 sec)
+
+→Mysql8.0からデフォルトの認証方式が新しくなっているため、古い認証方式に変更してみる。
+
+→同じエラー
+
+※接続は確認できているので不要な対応だった。
+
+wordpressの最新versionと過去versionに関する変更点など調べたり、最新MySQLのバージョンとの互換性についてもっと調べてみる？？
+
+
+[Unknown column ‘wp_’ in ‘field list’ \| WordPress.org](https://wordpress.org/support/topic/unknown-column-wp_-in-field-list/)
+
+
+◆確認した事項
+wordpressを置くところ。。。
+
+var/www/resraku.com　←一般的
+opt
+
+usr/localの下にはおかないほうがよい。
+
+確認対象：
+・apacheの設定
+・phpの設定
+・htdocs
+
+var/www/ディレクトリを作成
+wordpressのディレクトリを置く。
+
+owner:groupをapacheに変更
+
+cf)virtualhostとは、、、
+ip、port、hostで指定
+
+wordpressを動かすのはglobalでなくてvirtualhostで動かす
+
+参考）
+サイト設定には//で区切るものとglovalのものがある。
+
+wordpressは8080でリッスンするようにする。
+
+実作業手順
+1)httpd.confをオリジナルに戻す。
+2)mod_rewriteやmod_phpなど必要なものをincludeする。
+3)80と8080をリッスン
+4)virtualhostをインクルードするようにする
+
+5)/usr/local/apache2/はただのファイル確認用
+6)/www/varのvirtual hostでphpが動くようにする。
+
+
+インストールできなかった理由)
+wp_activate.php
+→db作るが、これが動いていない。。？
+※wp_configureの設定誤りが考えられる。
+
+※hosts.txt?.ini?をいじってvirtual hostで色々する。
