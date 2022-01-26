@@ -1,0 +1,612 @@
+[2022/1/25]研修タスクまとめ
+
+◆前提事項
+1.wordpress(phpのコンテンツ)と静的コンテンツ(以下ST)を以下のようにわける。
+ wp:/var/www
+ 静的:/usr/local/apache2/htdocs
+
+2.使用ポートは以下の通りとする。
+ wp:8080
+ 静的:80
+
+3.サイト構成として、wpはvirtualhostとしvhost用configファイルをhttpd.confにincludeする。
+
+◆手順詳細
+
+1.事前準備
+  1)httpd.confをオリジナルに戻す。
+  2)mod_rewriteやmod_phpなど必要なものをincludeする。
+
+2.構成の最適化
+  3)80と8080をリッスン(phpコンテンツをvirtualhostとして構成
+  4)virtualhostをインクルードするようにする
+  5)/usr/local/apache2/はただのファイル確認用(静的コンテンツ格納用)
+  6)/var/wwwのvirtual hostでphpが動くようにする。
+
+3.個人学習用
+  7)virtualhostについて、いろいろ設定を加えてみる。
+
+4.wordpress導入の続き
+  8)lamp環境の設定確認を行う。(続き作業)
+
+
+◆補足：インストールできなかった理由
+wp_activate.php
+→db作るが、これが動いていない。。？
+※wp_configureの設定誤り
+
+◆補足2：vhostの定義ファイル
+
+[admin@localhost extra]$ pwd
+/usr/local/apache2/conf/extra
+
+[admin@localhost extra]$ ls -l
+-rw-r--r--. 1 apache apache  1467  1月 20 15:31 httpd-vhosts.conf
+
+
+◆実作業手順
+
+  1)httpd.confをオリジナルに戻す。
+[admin@localhost conf]$ sudo mv httpd.conf httpd.conf_mine
+[admin@localhost conf]$ sudo mv httpd.conf.bak httpd.conf
+[admin@localhost conf]$ sudo systemctl restart httpd
+
+→設定をオリジナルに戻す。
+
+※自分で設定変更したのは以下の通り。
+
+[admin@localhost conf]$ diff httpd.conf httpd.conf_mine
+169a170
+> LoadModule php_module         modules/libphp.so
+180,181c181,184
+< User daemon
+< Group daemon
+---
+> #User daemon
+> #Group daemon
+> User apache
+> Group apache
+256c259
+<     AllowOverride None
+---
+>     AllowOverride All
+520a524,527
+>
+> <FilesMatch .php$>
+>     SetHandler application/x-httpd-php
+> </FilesMatch>
+
+↑以下の通り変更していた。
+ 1.mod_phpをロード(自分でやったものではなく、phpビルド時に自動構成。)
+ 2.UserとGroupをapacheにする。
+ 3.AllowOrverrideをAllに変更。
+ 4.(WEBサーバの動作をディレクトリ単位で制御できるようにしていた。ただこの時はvhostの設定などをいれていなかったのでとりあえず思考停止でやっていた。)
+ 5.FIlesMatchで.phpプログラムをhttpd-phpに割り当て。
+
+
+2)mod_rewriteやmod_phpなど必要なものをincludeする。
+ 1.apacheとphpビルド時、wordpress導入要件を確認し以下の通りモジュールを追加していたため、有効化する。
+   (指定すればincludeまで実行されると思っていた、、、、)
+
+＜apacheのmakeファイル作成時に指定したオプション＞
+sudo ./configure --with-apr=/usr/local/apr --with-apr-util=/usr/local/apr --enable-so --enable-module=rewrite --enable-ssl --enable-mpms-shared=all --with-mpm=prefork --enable-mods-shared=all
+
+[admin@localhost conf]$ httpd -M
+Loaded Modules:
+ core_module (static)
+ so_module (static)
+ http_module (static)
+ mpm_prefork_module (shared)
+ authn_file_module (shared)
+ authn_core_module (shared)
+ authz_host_module (shared)
+ authz_groupfile_module (shared)
+ authz_user_module (shared)
+ authz_core_module (shared)
+ access_compat_module (shared)
+ auth_basic_module (shared)
+ reqtimeout_module (shared)
+ filter_module (shared)
+ mime_module (shared)
+ log_config_module (shared)
+ env_module (shared)
+ headers_module (shared)
+ setenvif_module (shared)
+ version_module (shared)
+ unixd_module (shared)
+ status_module (shared)
+ autoindex_module (shared)
+ dir_module (shared)
+ alias_module (shared)
+
+→静的に読み込まれているPGM一覧
+
+[admin@localhost conf]$ less httpd.conf
+
+LoadModule mpm_prefork_module modules/mod_mpm_prefork.so
+
+→preforkは読み込まれている。
+
+#LoadModule ssl_module modules/mod_ssl.so
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+#LoadModule rewrite_module modules/mod_rewrite.so
+
+→mod_rewriteとmod_ssl(必須ではないがたしか推奨)が読み込まれていないため、読み込むよう修正する必要がある。
+
+[admin@localhost conf]$ sudo sed -i "s|#LoadModule ssl_module modules/mod_ssl.so|LoadModule ssl_module modules/mod_ssl.so|" /usr/local/apache2/conf/httpd.conf
+
+[admin@localhost conf]$ sudo sed -i "s|#LoadModule rewrite_module modules/mod_rewrite.so|LoadModule rewrite_module modules/mod_rewrite.so|" /usr/local/apache2/conf/httpd.conf
+
+[admin@localhost conf]$ less httpd.conf
+
+LoadModule ssl_module modules/mod_ssl.so
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+LoadModule rewrite_module modules/mod_rewrite.so
+
+[admin@localhost conf]$ sudo sed -i '170i LoadModule php_module modules/libphp.so' /usr/local/apache2/conf/httpd.conf
+
+170行目(load moduleしている塊の最後)にmod_phpをloadする行を追加
+
+[admin@localhost conf]$ sudo systemctl restart httpd
+
+→必要なモジュールを有効化
+
+・作業中に見たサイト
+
+[静的モジュールと動的モジュール - kakiNote](https://kakisoft.github.io/MiscellaneousDocs/InfraAndEnv_Tool_Service/Apache/%E9%9D%99%E7%9A%84%E3%83%A2%E3%82%B8%E3%83%A5%E3%83%BC%E3%83%AB%E3%81%A8%E5%8B%95%E7%9A%84%E3%83%A2%E3%82%B8%E3%83%A5%E3%83%BC%E3%83%AB/)
+
+[Apacheの構造](http://cos.linux-dvr.biz/archives/20)
+
+[「tar zxvf」を使うのはオジサンだけ！？自動で認識されるので「z」「j」「J」の指定は不要！ \| LFI](https://linuxfan.info/tar-z-option)
+
+3)80と8080をリッスン(phpコンテンツをvirtualhostとして構成
+
+[admin@localhost www]$ sudo mv wordpress training.com
+[admin@localhost www]$ cd training.com/
+[admin@localhost training.com]$ pwd
+/var/www/training.com
+
+→「wordpress」を「training.com」にリネーム
+(/var/www/training.comをドキュメントルートにする。)
+
+[admin@localhost extra]$ ls -l httpd-vhosts.conf
+-rw-r--r--. 1 apache apache 1467  1月 20 15:31 httpd-vhosts.conf
+
+[admin@localhost extra]$ sudo cp httpd-vhosts.conf httpd-vhosts.conf_bak
+
+[admin@localhost extra]$ ls -l httpd-vhosts.conf*
+-rw-r--r--. 1 apache apache 1467  1月 20 15:31 httpd-vhosts.conf
+-rw-r--r--. 1 root   root   1467  1月 25 11:26 httpd-vhosts.conf_bak
+
+→バックアップ取得(サンプルしかないため特に意味はなかった。)
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+[admin@localhost extra]$ less httpd-vhosts.conf
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+</VirtualHost>
+
+→ポート8080で待ち受けるようにVirtualHostを構成
+
+[admin@localhost conf]$ sudo sed -i '53i Listen 8080' /usr/local/apache2/conf/httpd.conf
+
+[admin@localhost conf]$ less /usr/local/apache2/conf/httpd.conf
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+Listen 80
+Listen 8080
+
+→53行目(Listen 80の下)に8080ポートでListenするよう追加
+
+
+参考サイト
+[バーチャルホストの例 - Apache HTTP サーバ バージョン 2.2](https://httpd.apache.org/docs/2.2/ja/vhosts/examples.html)
+
+[CentOS 7 の Apache httpd 2.4 に VirutalHost の設定をする手順 \|](https://weblabo.oscasierra.net/apache24-centos7-virtualhost/)
+
+[admin@localhost conf]$ sudo sed -i "s|#Include conf/extra/httpd-vhosts.conf|Include conf/extra/httpd-vhosts.conf|" /usr/local/apache2/conf/httpd.conf
+
+[admin@localhost conf]$ less /usr/local/apache2/conf/httpd.conf
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+# Virtual hosts
+Include conf/extra/httpd-vhosts.conf
+
+→デフォルトで無効化されているvhostのinclude設定を有効化する。
+
+[admin@localhost conf]$ exit
+
+
+→HOSTからVHOSTにHTTPアクセスするため、virtualbox側のポートフォワーリング設定を変更する。
+(仮想環境8080にフォワーリングする設定を追加)
+
+設定内容：
+  ホストポート8088⇔ゲストポート80    ←今まで使用していた既存ポート
+★ホストポート8089⇔ゲストポート8080  ←今回新規追加したポート
+
+
+[admin@localhost htdocs]$ ls -l *\.php
+-rw-r--r--. 1 apache apache 716  1月 24 16:27 db_check.php
+-rw-r--r--. 1 apache apache 448  1月 21 17:12 guzzle_test.php
+-rw-r--r--. 1 apache apache  21  1月 20 16:53 index.php
+-rw-r--rwx. 1 apache apache 117  1月 21 12:15 sample_xdebug.php
+[admin@localhost htdocs]$ sudo mv *\.php /var/www/training.com/
+
+→phpのコンテンツをすべてvhostに移す。
+
+→まだhttp://localhost:8089/index.phpは見れない。
+
+[admin@localhost conf]$ httpd -t
+Syntax OK
+
+→構文的な誤りはないため、設定の不足と思われる。
+
+★考えたこと。(事後追記：特に関係なかった)
+
+1.<Directory "/var/www/training.com">についてRequire all grantedを明示的に指定する必要がある？
+(事後追記：これが問題で拒否される場合は403エラーが返ってくるとおもわれる。)
+
+2.NameVirtualHostを記載すればいける、、？
+→virtualhostでアクセスを許可するIP：ポートを指定する。
+(事後追記：名前ベースの時に使用　※公式ドキュメント参照)
+
+3.mainがなくなるため、既存の設定もVirtulalHostブロックで囲む必要がある？
+(事後追記：vhost以外のアクセス時に使用されるので、特に問題なし。
+　　　　　　名前ベースの時はmain消さないといけない？？　※公式ドキュメント参照)
+
+→1から順に設定を加え、都度httpd -tで確認する。
+
+1の対応(requireの設定を追加)
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+★   <Directory "/var/www/training.com">
+★       Options Indexes FollowSymLinks #indexの表示。シンボリック有効化
+★       AllowOverride None #特に使用の予定がないため、Noneで設定
+★       Require all granted
+★   </Directory>
+</VirtualHost>
+
+[admin@localhost extra]$ sudo systemctl restart httpd
+
+[admin@localhost extra]$ httpd -t
+Syntax OK
+
+→★の行を追加
+
+　※まだ接続できない。
+
+2の対応(NameVirtualHostを追加)
+[admin@localhost conf]$ sudo sed -i "54i NameVirtualHost *:8080" /usr/local/apache2/conf/httpd.conf
+
+※この時点の設定
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+Listen 80
+Listen 8080
+NameVirtualHost *:8080
+
+[admin@localhost conf]$ httpd -t
+AH00548: NameVirtualHost has no effect and will be removed in the next release /usr/local/apache2/conf/httpd.conf:54
+Syntax OK
+
+→構文に影響がないが、追加した行が意味をなしていない。
+
+3の対応(既存のサイトについてvirtualhost化する)
+sudo sed -i "54i NameVirtualHost *:80" /usr/local/apache2/conf/httpd.conf
+
+※この時点の設定
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+Listen 80
+Listen 8080
+NameVirtualHost *:80
+NameVirtualHost *:8080
+
+[admin@localhost conf]$ httpd -t
+AH00548: NameVirtualHost has no effect and will be removed in the next release /usr/local/apache2/conf/httpd.conf:54
+Syntax OK
+
+→構文に影響がないが、追加した行が意味をなしていない。
++vitualhostへのアクセスがまだできない。
+(事後追記：ポートベースのため、この設定はいらなかった。)
+
+[admin@localhost conf]$ sudo sed -i "s|NameVirtualHost *:80|#NameVirtualHost *:80|" /usr/local/apache2/conf/httpd.conf
+[admin@localhost conf]$ sudo sed -i "s|NameVirtualHost *:8080|#NameVirtualHost *:8080|" /usr/local/apache2/conf/httpd.conf
+
+参考サイト
+[VirtualHost Examples](https://www.binasss.sa.cr/manual/vhosts/examples.html)
+
+[admin@localhost extra]$ sudo systemctl restart httpd
+
+[admin@localhost extra]$ httpd -t
+Syntax OK
+
+[admin@localhost extra]$ ss -atn
+LISTEN     0      128                                                              [::]:8080
+LISTEN     0      128                                                              [::]:80
+
+→8080ポートで待ち受けされていることは確認。
+
+※virtualboxとvhostのポートを8081に変更
+  (8080なのでウェルノウンポートではないが、今回の作業で追加したポートであるか念のため確認。)
+
+[admin@localhost conf]$ less httpd.conf
+Listen 80
+Listen 8081
+
+[admin@localhost extra]$ less httpd-vhosts.conf
+<VirtualHost *:8081>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride None
+       Require all granted
+   </Directory>
+</VirtualHost>
+
+[admin@localhost extra]$ ss -atn
+
+LISTEN      0      128                                            [::]:80
+LISTEN      0      128                                            [::]:8081
+
+→待ち受けているポートも更新されたことを確認。
+
+→ポートを解放していなかったため、下コマンドにより解放作業を実施。
+
+[admin@localhost extra]$ sudo firewall-cmd  --permanent --add-port=8081/tcp
+success
+[admin@localhost extra]$ sudo firewall-cmd --reload
+success
+
+→ブラウザアクセスができた。
+
+　※また.phpファイルをパースできていないためphpinfoが以下のように表示される。
+    httpd.confにphpパース設定をいれると/usr/local/ディレクトリで動的PGMが稼働する可能性があるからやめたほうがいい、、？
+    <?php phpinfo(); ?> 
+
+※8080でアクセスしたいため、すべての設定を8080に戻した上で以下コマンドを実行
+
+　ポート修正したもの
+   httpd.conf・httpd-vhosts.conf・virtualboxのポートフォワーリング
+
+[admin@localhost extra]$ sudo firewall-cmd  --permanent --add-port=8080/tcp
+success
+[admin@localhost extra]$ sudo firewall-cmd --reload
+success
+
+→ブラウザアクセスは可能。
+
+[admin@localhost ~]$ sudo firewall-cmd  --permanent --remove-port=8081/tcp
+success
+
+[admin@localhost ~]$ sudo firewall-cmd --reload
+success
+
+→解放した8081ポートは現状使用の予定がないため閉じる。
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride None
+       Require all granted
+★       <FilesMatch .php$>
+★          SetHandler application/x-httpd-php
+★       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+→phpinfoが表示されることを確認。
+※80の静的コンテンツしかおいていないところにもindex.php(中身はphpinfo)をおいて、パースされないことを確認。
+
+
+◆設定内容詳細
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       →ファイル一覧の表示とシンボリックリンクを有効化する。
+      
+       参考サイト：
+       <https://www.javadrive.jp/apache/ini/index24.html>
+       AllowOverride None
+       →.htaccessは使用していないため無効。
+       
+       Require all granted
+       →アクセスは全部許可。
+       
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+       →.phpがきた時のハンドラマッピング。
+       
+   </Directory>
+</VirtualHost>
+
+
+★追加でやること。
+
+・ベーシック認証・ダイジェスト認証設定を追加。
+・SSL設定を追加。
+
+
+・ベーシック認証設定(静的コンテンツではなく、/var/wwwにだけ認証を追加する。)
+
+[admin@localhost conf]$ sudo htpasswd -c /usr/local/apache2/conf/.htpasswd auth_test
+New password:
+Re-type new password:
+Adding password for user auth_test
+
+→htpasswd - httpユーザー用のベーシック認証を管理するコマンド
+
+ユーザ   ：auth_test
+パスワード:auth1234
+
+[admin@localhost conf]$ ls -la
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+-rw-r--r--.  1 root   root      48  1月 25 17:35 .htpasswd
+
+[admin@localhost conf]$ sudo chown apache:apache .htpasswd
+[admin@localhost conf]$ sudo chmod 600 .htpasswd
+
+[admin@localhost conf]$ ls -la
+-rw-------.  1 apache apache    48  1月 25 17:35 .htpasswd
+
+→apacheユーザに所有させる+セキュリティのためグループとotherからは権限を外す。
+
+参考サイト
+[CentOS 7 : Apache httpd : Basic 認証を利用する : Server World](https://www.server-world.info/query?os=CentOS_7&p=httpd&f=8)
+
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+※4行追加するためvimで修正
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+    ★AuthType Basic
+    ★AuthName "Basic Authentication"
+    ★AuthUserFile /usr/local/apache2/conf/.htpasswd
+    ★require valid-user
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride None
+       Require all granted
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+→★vitualhostの設定箇所にベーシック認証に関連する設定を追加
+
+[admin@localhost extra]$ httpd -t
+AH00526: Syntax error on line 47 of /usr/local/apache2/conf/extra/httpd-vhosts.conf:
+AuthType not allowed in <VirtualHost> context
+
+→構文エラー
+
+[admin@localhost conf]$ less httpd.conf
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+LoadModule auth_basic_module modules/mod_auth_basic.so
+
+→ベーシック認証用のモジュールはloadされていることを確認。
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride None
+       Require all granted
+
+       ★AuthType Basic
+       ★AuthName "Basic Authentication"
+       ★AuthUserFile /usr/local/apache2/conf/.htpasswd
+       ★require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+[admin@localhost extra]$ httpd -t
+Syntax OK
+
+→ベーシック認証に関連の設定を<Directory~></Directory>の中に移動したらOKに
+
+[admin@localhost extra]$ sudo systemctl restart httpd
+
+→画面表示した際にベーシック認証がでない。
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride None
+
+       AuthType Basic
+       AuthName "Basic Authentication"
+       AuthUserFile /usr/local/apache2/conf/.htpasswd
+       require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+→Require all grantedは認証を要求せずアクセスを許可してしまうらしいので、行を削除。
+まだブラウザアクセス時に要求されない。
+
+[admin@localhost extra]$ sudo systemctl restart httpd
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       ★AllowOverride All
+
+       AuthType Basic
+       AuthName "Basic Authentication"
+       AuthUserFile /usr/local/apache2/conf/.htpasswd
+       require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+→AllowOverrideの設定をNoneからAllに変更
+(/var/www/training.comに対して.htaccessでの設定を許可する。)
+
+↑1/25まだ認証が要求されないが、ここまで-------------------------------------------------------------------------------------------------------------
+
+◆キーワード
+mozila.org
