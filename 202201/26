@@ -1,0 +1,868 @@
+[2022/1/26]研修タスクまとめ
+
+・大枠
+1.basic認証設定
+2.digest認証設定
+3.ssl設定
+
+◆手順詳細
+
+・ベーシック認証設定(静的コンテンツではなく、/var/wwwにだけ認証を追加する。)
+
+[admin@localhost conf]$ sudo htpasswd -c /usr/local/apache2/conf/.htpasswd auth_test
+New password:
+Re-type new password:
+Adding password for user auth_test
+
+→htpasswd - httpユーザー用のベーシック認証を管理するコマンド
+
+ユーザ   ：auth_test
+パスワード:xxxxxxx
+
+[admin@localhost conf]$ ls -la
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+-rw-r--r--.  1 root   root      48  1月 25 17:35 .htpasswd
+
+[admin@localhost conf]$ sudo chown apache:apache .htpasswd
+[admin@localhost conf]$ sudo chmod 600 .htpasswd
+
+[admin@localhost conf]$ ls -la
+-rw-------.  1 apache apache    48  1月 25 17:35 .htpasswd
+
+→apacheユーザに所有させる+セキュリティのためグループとotherからは権限を外す。
+
+参考サイト
+[CentOS 7 : Apache httpd : Basic 認証を利用する : Server World](https://www.server-world.info/query?os=CentOS_7&p=httpd&f=8)
+
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+※4行追加するためvimで修正
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+    ★AuthType Basic
+    ★AuthName "Basic Authentication"
+    ★AuthUserFile /usr/local/apache2/conf/.htpasswd
+    ★require valid-user
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride None
+       Require all granted
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+→★vitualhostの設定箇所にベーシック認証に関連する設定を追加
+
+[admin@localhost extra]$ httpd -t
+AH00526: Syntax error on line 47 of /usr/local/apache2/conf/extra/httpd-vhosts.conf:
+AuthType not allowed in <VirtualHost> context
+
+→構文エラー
+
+[admin@localhost conf]$ less httpd.conf
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+LoadModule auth_basic_module modules/mod_auth_basic.so
+
+→ベーシック認証用のモジュールはloadされていることを確認。
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride None
+       Require all granted
+
+       ★AuthType Basic
+       ★AuthName "Basic Authentication"
+       ★AuthUserFile /usr/local/apache2/conf/.htpasswd
+       ★require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+[admin@localhost extra]$ httpd -t
+Syntax OK
+
+→ベーシック認証に関連の設定を<Directory~></Directory>の中に移動したらOKに
+
+
+[admin@localhost extra]$ sudo systemctl restart httpd
+
+→画面表示した際にベーシック認証がでない。
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride None
+
+       AuthType Basic
+       AuthName "Basic Authentication"
+       AuthUserFile /usr/local/apache2/conf/.htpasswd
+       require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+→Require all grantedは認証を要求せずアクセスを許可してしまうらしいので、行を削除。
+
+→まだブラウザアクセス時に要求されない。
+
+[admin@localhost extra]$ sudo systemctl restart httpd
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       ★AllowOverride All
+
+       AuthType Basic
+       AuthName "Basic Authentication"
+       AuthUserFile /usr/local/apache2/conf/.htpasswd
+       require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+→AllowOverrideの設定をNoneからAllに変更
+
+↑ここまで1/25実施-------------------------------------------
+
+ブラウザ表示にてBasic認証が要求されたが、IPASS入力後500エラーに、、、
+
+[admin@localhost logs]$ less training.com-error_log
+[Wed Jan 26 10:57:25.317790 2022] [authn_file:error] [pid 3825] (13)Permission denied: [client 10.0.2.2:58945] AH01620: Could not open password file: /usr/local/apache2/conf/.htpasswd
+
+→.htpasswdのオープンができない。
+
+[admin@localhost logs]$ ls -ltr /usr/local/apache2/conf/.htpasswd
+-rw-------. 1 apache apache 48  1月 25 17:35 /usr/local/apache2/conf/.htpasswd
+
+[admin@localhost logs]$ sudo chmod 604 /usr/local/apache2/conf/.htpasswd
+
+[admin@localhost logs]$ ls -ltr /usr/local/apache2/conf/.htpasswd
+-rw----r--. 1 apache apache 48  1月 25 17:35 /usr/local/apache2/conf/.htpasswd
+
+→otherからreadだけ許可するよう設定を変更
+
+→認証され画面表示できることを確認。
+
+
+補足：
+画面表示について、サーバリブート後に認証Basic認証がきくようになった要因がrebootなのかAllowOverride Allなのかを念のため確認する。
+
+[admin@localhost extra]$ sudo sed -i "s|AllowOverride All|AllowOverride None|" /usr/local/apache2/conf/extra/httpd-vhosts.conf
+[admin@localhost extra]$ less /usr/local/apache2/conf/extra/httpd-vhosts.conf
+[admin@localhost extra]$ sudo systemctl restart httpd
+
+→AllowOverrideをNoneに変更
+
+→ブラウザを開きなおして再度アクセスしたら認証が要求された。
+
+
+補足：次回からcurlコマンドでも実行する。
+(コピペで見れるように、、)
+
+[admin@localhost extra]$ sudo reboot
+
+→この状態で一度リブートを実施。
+
+→再度ブラウザでアクセスしたら認証が要求された。
+(今回はhtaccessファイルに記述しているわけではないのでAllowOverride Allは関係なかった。)
+
+
+・Digest認証設定
+
+[admin@localhost ~]$ sudo vim /usr/local/apache2/conf/extra/httpd-vhosts.conf
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride None
+
+       #Basic Authentication config
+
+       #AuthType Basic
+       #AuthName "Basic Authentication"
+       #AuthUserFile /usr/local/apache2/conf/.htpasswd
+       #require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+→ベーシック認証の設定は一度すべて外す。
+
+
+[admin@localhost conf]$ less httpd.conf
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+#LoadModule auth_digest_module modules/mod_auth_digest.so
+
+[admin@localhost conf]$ sudo sed -i "s|#LoadModule auth_digest_module modules/mod_auth_digest.so|LoadModule
+ auth_digest_module modules/mod_auth_digest.so|" /usr/local/apache2/conf/httpd.conf
+ 
+[admin@localhost conf]$ cat /usr/local/apache2/conf/httpd.conf | grep digest
+LoadModule auth_digest_module modules/mod_auth_digest.so
+
+[admin@localhost conf]$ sudo systemctl restart httpd
+
+→mod_auth_digest.soがloadされていなかったため、Loadするよう設定を変更
+
+・Digest認証について
+[Digest認証 - Wikipedia](https://ja.wikipedia.org/wiki/Digest%E8%AA%8D%E8%A8%BC)
+
+・MD5(ハッシュ化に使用するアルゴリズム)について
+[MD5 - Wikipedia](https://ja.wikipedia.org/wiki/MD5)
+
+・Digest認証用ユーザを作成するコマンドの書式
+htdigest [-c] パスワードファイル レルム ユーザー名
+
+・レルムとは、、、
+認証スキーマ用に定義されるパラメータ。(認証が必要なエリアの名前)
+ (The authentication parameter realm is defined for all authentication
+   schemes:)
+
+[admin@localhost conf]$ sudo htdigest -c /usr/local/apache2/conf/.htdigest 'Digest Zone' digest_test
+
+Adding password for digest_test in realm Digest Zone.
+New password:
+Re-type new password:
+
+ユーザ   ：digest_test
+パスワード:xxxxxxxx
+
+[admin@localhost conf]$ ls -l /usr/local/apache2/conf/.htdigest
+-rw-r--r--. 1 root root 57  1月 26 11:57 /usr/local/apache2/conf/.htdigest
+
+[admin@localhost conf]$ sudo chmod 604 /usr/local/apache2/conf/.htdigest
+
+[admin@localhost conf]$ ls -l /usr/local/apache2/conf/.htdigest
+-rw----r--. 1 root root 57  1月 26 11:57 /usr/local/apache2/conf/.htdigest
+
+→digest認証用ユーザの作成および最小限のパーミッションに変更
+
+参考サイト：
+[RFC 2617 - HTTP Authentication: Basic and Digest Access Authentication](https://datatracker.ietf.org/doc/html/rfc2617#section-3.2.1)
+[��IT�FApache�Ń��[�U�[�F�؂��s���ɂ́iDigest�F�ؕҁj](https://atmarkit.itmedia.co.jp/flinux/rensai/linuxtips/699apachedigest.html)
+
+
+・設定項目
+AuthType            認証方式
+AuthName            認証領域
+AuthDigestDomain    保護するURI(AuthDigestDomain should list the locations that will be protected by this configuration.)
+AuthDigestProvider  認証プロバイダ
+AuthUserFile        パスワードファイル
+
+・設定する内容
+#Digest Authentication config
+
+AuthType Digest
+AuthName "Digest Authentication"
+AuthDigestDomain "training.com-error_log"
+AuthDigestProvider file
+AuthUserFile /usr/local/apache2/conf/.htdigest
+Require valid-user
+
+設定の参考サイト：
+[Apache \| Digest認証を使ったアクセス制限を行う](https://www.javadrive.jp/apache/allow/index8.html)
+
+[admin@localhost ~]$ sudo htdigest /usr/local/apache2/conf/.htdigest 'Digest Zone' digest_test2
+
+ユーザ   ：digest_test2
+パスワード:xxxxxxxx
+
+→認証できないため、2ユーザ目を追加
+
+→再度認証を試みるが認証できない。
+
+[admin@localhost ~]$ ls -l /usr/local/apache2/conf/.htdigest
+-rw----r--. 1 root root 115  1月 26 12:09 /usr/local/apache2/conf/.htdigest
+[admin@localhost ~]$ sudo chown apache:apache /usr/local/apache2/conf/.htdigest
+[admin@localhost ~]$ ls -l /usr/local/apache2/conf/.htdigest
+-rw----r--. 1 apache apache 115  1月 26 12:09 /usr/local/apache2/conf/.htdigest
+
+→.htdigestファイルをapacheに所有させる。
+
+→再度認証を試みるが認証できない。
+
+[admin@localhost ~]$sudo reboot
+
+→念のためリブート
+
+→再度認証を試みるが認証できない。
+
+[admin@localhost ~]$ sudo yum list *md5*
+
+インストール済みパッケージ
+cyrus-sasl-md5.x86_64 2.1.26-23.el7 @anaconda
+isomd5sum.x86_64 1:1.0.10-5.el7 @anaconda
+
+md5が入っていることを確認。
+(ハッシュ化したものをあらかじめハッシュ化して保管しているため、なかったらおかしい、、？)
+
+[admin@localhost logs]$ less training.com-error_log
+
+[Wed Jan 26 12:22:20.061911 2022] [auth_digest:error] [pid 1542] [client 10.0.2.2:59956] AH01790: user `digest_test' in realm `Digest Authentication' not found: /index.php
+
+→パスワードのミスマッチではなくユーザが見つかっていない。
+
+・Digestユーザ作成時に指定したrealmを任意の値だと勘違いしていたがAuthNameと一致する必要があるようなので、AuthNameを修正
+
+[admin@localhost logs]$ sudo sed -i 's|AuthName "Digest Authentication"|AuthName "Digest Zone"|' /usr/local/apache2/conf/extra/httpd-vhosts.conf
+
+→以下の通り修正
+
+(修正前)
+AuthName "Digest Authentication"
+
+(修正後)
+AuthName "Digest Zone"
+
+→認証可能に
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+
+[admin@localhost extra]$ less httpd-vhosts.conf
+
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride None
+
+       #Basic Authentication config
+
+       #AuthType Basic
+       #AuthName "Basic Authentication"
+       #AuthUserFile /usr/local/apache2/conf/.htpasswd
+       #require valid-user
+
+       #Digest Authentication config
+
+       ★#AuthType Digest
+       ★#AuthName "Digest Zone"
+       ★#AuthDigestDomain "training.com"
+       ★#AuthDigestProvider file
+       ★#AuthUserFile /usr/local/apache2/conf/.htdigest
+       ★#Require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+→無効化しておく。
+
+★LBとdigest認証についてしらべる。
+ (basic認証の存在意義について理解する。)
+
+・SSL設定(HTTPSでアクセスできるように設定)
+
+
+備考：現在のHTTPアクセスについて
+(以下のパターンでアクセス可能。)
+
+localhostにアクセスする場合
+
+★静的コンテンツ
+http://localhost:8088/
+　※virtualhostの設定で80ポートにフォワーリングするため
+
+★wordpress(他phpファイル)
+http://localhost:8089/
+　※virtualhostの設定で8080ポートにフォワーリングするため
+
+
+仮想的な内部ネットワークでアクセスする場合
+
+★静的コンテンツ
+http://192.168.56.110/
+
+★wordpress(他phpファイル)
+http://192.168.56.110:8080/
+
+　※ただしサーバ作り直し時にDHCPで新規IPがシーケンシャルに発行される。
+
+
+参考サイト(SSL通信に必要なファイルについて)：
+[【用語明解】証明書の申請で登場する各種ファイルの見分け方 \| 大手正規SSL証明書が定価よりMAX66％OFFから 【 SSLコンシェル 】](https://www.ssl-concier.com/news/topics/164)
+
+・作業手順
+  SSL設定手順
+  1.秘密鍵を作成
+  2.CSR作成
+  3.公開鍵を作成
+  4.configファイルを作成
+
+参考サイト(SSL設定流れについて)：
+[Apache/SSL自己証明書の作成とmod sslの設定 - maruko2 Note.](http://www.maruko2.com/mw/Apache/SSL%E8%87%AA%E5%B7%B1%E8%A8%BC%E6%98%8E%E6%9B%B8%E3%81%AE%E4%BD%9C%E6%88%90%E3%81%A8mod_ssl%E3%81%AE%E8%A8%AD%E5%AE%9A)
+[VirtualHostとSSLの設定を行う。 \| SEとDIY](https://choice-site.com/2012/09/10/virtualhost%E3%81%A8ssl%E3%81%AE%E8%A8%AD%E5%AE%9A%E3%82%92%E8%A1%8C%E3%81%86%E3%80%82/)
+
+
+参考サイト(mod_sslとopensslの関係について)：
+[mod_ssl \| CentOSサーバー構築入門](http://cos.linux-dvr.biz/archives/tag/mod_ssl)
+
+OpenSSL：SSLを利用するために必要なソフトウェア
+mod_ssl：OpenSSLを使ってApacheをSSLに対応させるモジュール
+
+参考サイト(暗号強度について)：
+[暗号スイートの暗号強度と、公開鍵のビット数の設定、及びRSAとECDHEでサーバ負荷の比較 - Apache 2.4系でHTTP/2対応サーバを構築してみるテスト。](https://http2.try-and-test.net/ecdhe.html)
+
+[admin@localhost conf]$ cat httpd.conf | grep mod_ssl
+LoadModule ssl_module modules/mod_ssl.so
+
+[admin@localhost conf]$ sudo yum list *ssl*
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+インストール済みパッケージ
+openssl.x86_64   1:1.0.2k-22.el7_9   @updates
+openssl-devel.x86_64   1:1.0.2k-22.el7_9   @updates
+openssl-libs.x86_64   1:1.0.2k-22.el7_9   @updates
+
+→opennsslがインストールされていること、mod_sslがloadされていることを確認。
+
+
+1.秘密鍵を作成
+[admin@localhost conf]$ sudo openssl genrsa -aes128 -out server.key 2048
+Generating RSA private key, 2048 bit long modulus
+...................................................................................+++
+........+++
+e is 65537 (0x10001)
+Enter pass phrase for server.key:
+Verifying - Enter pass phrase for server.key:
+
+パスフレーズ：seacret9876
+
+→以下の秘密鍵を生成。
+ genrsa    ：公開鍵暗号方式
+ aes128    ：128bitAES暗号方式を使用(秘密鍵を暗号化するもの)
+ server.key：秘密鍵のファイル名
+ 2048      :秘密鍵のbit数
+
+ 
+[admin@localhost conf]$ sudo openssl req -new -key server.key -sha256 -out server.csr
+Enter pass phrase for server.key:
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [XX]:JP
+State or Province Name (full name) []:Tokyo
+Locality Name (eg, city) [Default City]:Shibuyaku
+Organization Name (eg, company) [Default Company Ltd]:Training Inc.
+Organizational Unit Name (eg, section) []:Training Section
+Common Name (eg, your name or your server's hostname) []:training.com
+Email Address []:
+
+Please enter the following 'extra' attributes
+to be sent with your certificate request
+A challenge password []:                    #証明書を破棄する時に必要になるパスワード
+An optional company name []:                #別の組織名
+
+→以下のCSRファイルを作成
+ input秘密鍵    :server.key
+ 暗号アルゴリズム:sha256
+
+補足：入力値をコマンドラインで一発でできるようにしておく。
+
+
+[admin@localhost conf]$ sudo openssl x509 -req -days 365 -sha256 -in server.csr -signkey server.key -out server.crt
+[sudo] admin のパスワード:
+Signature ok
+subject=/C=JP/ST=Tokyo/L=Shibuyaku/O=Training Inc./OU=Training Section/CN=training.com
+Getting Private key
+Enter pass phrase for server.key:
+
+→以下の公開鍵を作成
+ 証明書の形式    :x509
+ 有効い期限      :365日
+ 暗号アルゴリズム :sha256
+ inputCSRファイル:server.csr
+ input秘密鍵     :server.key
+ 
+
+参考サイト(x509について)：
+[X.509�Ƃ� - ��IT](https://atmarkit.itmedia.co.jp/ait/articles/0401/01/news098.html)
+
+[X.509 - Wikipedia](https://ja.wikipedia.org/wiki/X.509)
+
+[X.509�Ƃ� - IT�p�ꎫ�T e-Words](https://e-words.jp/w/X.509.html)
+
+
+
+[admin@localhost .ssl]$ sudo mv /usr/local/apache2/conf/server* ./
+
+[admin@localhost .ssl]$ pwd
+/usr/local/apache2/.ssl
+
+[admin@localhost .ssl]$ ls
+server.crt  server.csr  server.key
+
+→confフォルダに鍵を置いておくのが微妙だったので、とりあえず隠しディレクトリを作成して格納
+
+
+
+[admin@localhost extra]$ pwd
+/usr/local/apache2/conf/extra
+[admin@localhost extra]$ ls -l httpd-ssl.conf
+-rw-r--r--. 1 apache apache 13371  1月 20 15:31 httpd-ssl.conf
+
+[admin@localhost extra]$ sudo cp httpd-ssl.conf httpd-ssl.conf_bak
+
+→mod_sslビルド時にできたhttpd-ssl.confを修正する。
+ (念のためバックアップ)
+
+[admin@localhost extra]$ sudo vim httpd-ssl.conf
+
+→httpd-ssl.conf内で定義されている以下VirtualHostの定義をすべて削除
+ (wordpress用に作成したvirtualhostで443アクセスを拾えずにもっていかれるため。)
+ 
+<VirtualHost _default_:443>
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+</VirtualHost>
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+
+★<VirtualHost *:443>
+★    ServerAdmin webmaster@training.com
+★    DocumentRoot "/var/www/training.com"
+★    ServerName training.com
+★    ErrorLog "logs/training.com-error_log"
+★    CustomLog "logs/training.com-access_log" common
+★
+★    #ssl setting
+★    SSLEngine on
+★    SSLProtocol +TLSv1.2
+★    SSLCertificateFile /usr/local/apache2/.ssl/server.crt
+★    SSLCertificateKeyFile /usr/local/apache2/.ssl/server.key
+★
+★   <Directory "/var/www/training.com">
+★       Options Indexes FollowSymLinks
+★       AllowOverride None
+★
+★       #Basic Authentication config
+★
+★       #AuthType Basic
+★       #AuthName "Basic Authentication"
+★       #AuthUserFile /usr/local/apache2/conf/.htpasswd
+★       #require valid-user
+★
+★       #Digest Authentication config
+★
+★       #AuthType Digest
+★       #AuthName "Digest Zone"
+★       #AuthDigestDomain "training.com"
+★       #AuthDigestProvider file
+★       #AuthUserFile /usr/local/apache2/conf/.htdigest
+★       #Require valid-user
+★
+★       <FilesMatch .php$>
+★          SetHandler application/x-httpd-php
+★       </FilesMatch>
+★   </Directory>
+★</VirtualHost>
+
+→443でアクセスした際のvirtualhost設定を追加
+
+補足：
+SSLProtocol +TLSv1.2　※TL1S1.2のみ許可
+
+
+[admin@localhost conf]$ sudo cat httpd.conf | grep ssl
+#Include conf/extra/httpd-ssl.conf
+
+[admin@localhost conf]$ sudo sed -i  "s|#Include conf/extra/httpd-ssl.conf|Include conf/extra/httpd-ssl.conf|" /usr/local/apache2/conf/h
+ttpd.conf
+
+[admin@localhost conf]$ sudo cat httpd.conf | grep ssl
+Include conf/extra/httpd-ssl.conf
+
+→httpd-ssl.confがincludeされていなかったので、include
+
+
+[admin@localhost conf]$ sudo firewall-cmd --list-all
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+  services: dhcpv6-client http mysql ssh
+  
+[admin@localhost conf]$ sudo firewall-cmd --permanent --add-service=https
+success
+
+[admin@localhost conf]$ sudo firewall-cmd --reload
+success
+
+[admin@localhost conf]$ sudo firewall-cmd --list-all
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+  services: dhcpv6-client http https mysql ssh
+
+→https接続の許可設定が行われていなかったので、通信許可設定
+
+
+[admin@localhost .ssl]$sudo reboot
+
+→色々設定を変更したため、一度サーバリブート
+
+
+[admin@localhost ~]$ sudo systemctl status httpd
+● httpd.service - LSB: start and stop Apache HTTP Server
+   Loaded: loaded (/etc/rc.d/init.d/httpd; bad; vendor preset: disabled)
+   Active: failed (Result: exit-code) since
+   
+1月 26 15:46:21 localhost.localdomain systemd[1]: Starting LSB: start and stop Apache HTTP Server...
+ 1月 26 15:46:27 localhost.localdomain httpd[1154]: Starting httpd: AH00526: Syntax error on line 92...nf:
+ 
+ →failedになっている。
+ 
+ 構文エラーのようなので、httpd -tで確認
+ 
+ [admin@localhost extra]$ httpd -t
+AH00526: Syntax error on line 92 of /usr/local/apache2/conf/extra/httpd-ssl.conf:
+SSLSessionCache: 'shmcb' session cache not supported (known names: ). Maybe you need to load the appropriate socache module (mod_socache_shmcb?).
+
+→mod_socache_shmcbのloadが必要っぽい。
+
+mod_socache_shmcbとは、、、
+→キャッシュを作成したり、キャッシュへのアクセス機能を提供するモジュール
+
+[mod_socache_shmcb - Apache HTTP Server Version 2.4](https://httpd.apache.org/docs/2.4/mod/mod_socache_shmcb.html)
+
+
+[admin@localhost conf]$ cat httpd.conf | grep mod_socache_shmcb
+#LoadModule socache_shmcb_module modules/mod_socache_shmcb.so
+
+[admin@localhost conf]$ sudo sed -i  "s|#LoadModule socache_shmcb_module modules/mod_socache_shmcb.so|LoadModule socache_shmcb_module modules/mod_socache_shmcb.so|" /usr/local/apache2/conf/httpd.conf
+
+[admin@localhost conf]$ cat httpd.conf | grep mod_socache_shmcb
+LoadModule socache_shmcb_module modules/mod_socache_shmcb.so
+
+→mod_socache_shmcb.soがloadされていなかったのでloadされるように設定
+
+
+
+[admin@localhost conf]$ sudo systemctl restart httpd
+Job for httpd.service failed because the control process exited with error code. See "systemctl status httpd.service" and "journalctl -xe" for details.
+[admin@localhost conf]$ sudo systemctl status httpd
+● httpd.service - LSB: start and stop Apache HTTP Server
+   Loaded: loaded (/etc/rc.d/init.d/httpd; bad; vendor preset: disabled)
+   Active: failed (Result: exit-code) since 水 2022-01-26 16:02:42 JST; 9s ago
+-----------------------------------------------------------------------------------------------
+
+[admin@localhost extra]$ journalctl -xe
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+-- Unit httpd.service has begun starting up.
+ 1月 26 16:02:42 localhost.localdomain httpd[2945]: Starting httpd: Apache/2.4.52 mod_ssl (Pass Phrase Dialog)
+ 1月 26 16:02:42 localhost.localdomain httpd[2945]: Some of your private key files are encrypted for security reasons.
+ 1月 26 16:02:42 localhost.localdomain httpd[2945]: In order to read them you have to provide the pass phrases.
+ 1月 26 16:02:42 localhost.localdomain httpd[2945]: Private key training.com:443:0 (/usr/local/apache2/.ssl/server.key)
+ 1月 26 16:02:42 localhost.localdomain httpd[2945]: Enter pass phrase:Apache:mod_ssl:Error: Private key not found.
+ 1月 26 16:02:42 localhost.localdomain httpd[2945]: **Stopped
+ 1月 26 16:02:42 localhost.localdomain httpd[2945]: [失敗]
+ 1月 26 16:02:42 localhost.localdomain systemd[1]: httpd.service: control process exited, code=exited status=1
+ 1月 26 16:02:42 localhost.localdomain systemd[1]: Failed to start LSB: start and stop Apache HTTP Server.
+-- Subject: Unit httpd.service has failed
+
+→httpdをrestartしてもエラーに、、、
+
+自動起動時にプライベートキーのパスワード入力を求められ、入力できていないためエラーになっているため
+自動で入力を行うスクリプトを配置して読み込みを行うよう設定を追加。
+
+[admin@localhost .ssl]$ sudo vim pass_phrase.sh
+------------------
+#!/bin/sh
+echo 'seacret9876'
+------------------
+
+[admin@localhost .ssl]$ sudo chmod 711 pass_phrase.sh
+[admin@localhost .ssl]$ ls -l pass_phrase.sh
+-rwx--x--x. 1 root root 29  1月 26 16:26 pass_phrase.sh
+
+→中身でechoしているのであまり意味をなしていないが、とりあえずグループとotherには実行のみ許可。
+
+[admin@localhost extra]$ sudo vim httpd-ssl.conf
+
+(修正前)
+SSLPassPhraseDialog  builtin
+
+(修正後)
+#SSLPassPhraseDialog  builtin
+SSLPassPhraseDialog exec:/usr/local/apache2/.ssl/pass_phrase.sh
+
+→builtに設定すると対話式にパスフレーズを入力する必要があるため、先ほどのシェルを実行するように変更
+
+[admin@localhost extra]$ sudo systemctl restart httpd
+
+[admin@localhost extra]$ sudo systemctl status httpd
+● httpd.service - LSB: start and stop Apache HTTP Server
+   Loaded: loaded (/etc/rc.d/init.d/httpd; bad; vendor preset: disabled)
+   Active: activating (start) since 水 2022-01-26 16:35:43 JST; 30s ago
+   
+→起動するようになった。
+
+
+HOST側のHostsファイルに以下を追記
+192.168.56.110 training.com
+
+以下URLでtraining.comにアクセス。(chrome)
+https://training.com
+
+→「保護されていない通信」となるが、証明書の設定した通りであることを確認。
+
+→chromeにて証明書をエクスポート+インポートを実施。
+  
+  ※エクスポート場所
+    C:\Users\y_mashiko\training
+
+→問題なくssl接続できる想定だったが、再度「保護されていない通信」になる。
+
+補足)chromeでの証明書の検証について、
+   
+バージョン58のセキュリティ更新(2017/5/8)により、SSL証明書の Common Name(CN) は、Subject Alernative Name(SAN) にしなければならない。
+RFC2818(HTTP Over TLS)によると、CommonNameは推奨しない、subjectAltNameを推奨するとのこと。CommonNameはChromeのセキュリティバグの原因となっていたため、修正を行った。
+
+参考サイト：
+[自己署名証明書で「この接続ではプライバシーが保護されません」「SAN対応のSHA-2自己署名証明書」](https://blog.fileshelfplus.com/vps/312)
+
+SANについて、、、
+
+→san対応の証明書を使用する必要がある。
+
+
+[admin@localhost .ssl]$ sudo openssl genrsa -aes128 -out server_second.key 2048
+[sudo] admin のパスワード:
+Generating RSA private key, 2048 bit long modulus
+.....................................................+++
+.............................................+++
+e is 65537 (0x10001)
+Enter pass phrase for server_second.key:
+Verifying - Enter pass phrase for server_second.key:
+
+→念のため、秘密鍵から作成し直し。
+
+パスフレーズ：xxxxxxxxx
+
+
+[admin@localhost .ssl]$ sudo openssl req -new -key server_second.key -sha256 -out server_second.csr
+Enter pass phrase for server_second.key:
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [XX]:JP
+State or Province Name (full name) []:Tokyo
+Locality Name (eg, city) [Default City]:Shibuyaku
+Organization Name (eg, company) [Default Company Ltd]:Training Inc.
+Organizational Unit Name (eg, section) []:Training Section
+Common Name (eg, your name or your server's hostname) []:training.com
+Email Address []:
+
+Please enter the following 'extra' attributes
+to be sent with your certificate request
+A challenge password []:
+An optional company name []:
+
+→csrファイルの作り直し
+
+
+[admin@localhost .ssl]$ sudo vim san.txt
+
+subjectAltName = DNS:training.com, IP:192.168.56.110
+
+→証明書に設定するため、DNS情報を設定
+
+
+[admin@localhost .ssl]$ sudo openssl x509 -req -days 365 -sha256 -in server_second.csr -signkey server_second.key -out server_second.crt -extfile san.txt
+[sudo] admin のパスワード:
+Signature ok
+subject=/C=JP/ST=Tokyo/L=Shibuyaku/O=Training Inc./OU=Training Section/CN=training.com
+Getting Private key
+Enter pass phrase for server_second.key:
+
+→san.txtを読み取る設定を追加。
+
+[admin@localhost .ssl]$ sudo sed -i  "s|seacret9876|seacret1234|" pass_phrase.sh
+
+→新しい証明書のパスフレーズに変更
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+
+(修正前)
+    SSLCertificateFile /usr/local/apache2/.ssl/server_second.crt
+    SSLCertificateKeyFile /usr/local/apache2/.ssl/server_second.key
+
+(修正後)
+    SSLCertificateFile /usr/local/apache2/.ssl/server.crt
+    SSLCertificateKeyFile /usr/local/apache2/.ssl/server.key
+    
+→新しい証明書に設定
+
+[admin@localhost conf]$ sudo systemctl restart httpd
+
+
+→ブラウザアクセス時、以下の通りSANの設定がされていることを確認
+
+DNS Name=training.com
+IP Address=192.168.56.110
+
+証明書のエクスポートインポートを実施。
+
+「この接続は保護されています。」となることを確認。
+
