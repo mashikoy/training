@@ -197,8 +197,6 @@ Syntax OK
 →ブラウザを開きなおして再度アクセスしたら認証が要求された。
 
 
-補足：次回からcurlコマンドでも実行する。
-(コピペで見れるように、、)
 
 [admin@localhost extra]$ sudo reboot
 
