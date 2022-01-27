@@ -1,0 +1,475 @@
+ [2022/1/27]確認事項
+ 
+◆大枠
+ 1.昨日の確認事項について対応
+ 2.wordpress導入続き
+
+◆確認事項について
+1.psコマンドで確認した際、apacheの実行ユーザがdeamonになっていたため設定の見直しを行う。
+2.HSTSについて(軽く)抑える。
+3.basic認証をcurlコマンドで通過してみる。(以降コピペでリクエストできるように、、、)
+4.CSRファイル作成時、コマンドラインで入力せずに一発でできるようにする。(人為的ミスの防止)
+5.basic認証のほうがdigest認証より望ましいケースについて理解する。(cf:バランサー)
+
+◆確認結果
+1)psコマンドで確認した際、apacheの実行ユーザがdeamonになっていたため設定の見直しを行う。
+
+  原因)httpd.confを自分で修正したものからオリジナルに戻した際に、実行ユーザ設定がdeamonに戻っていた。
+  
+  [admin@localhost conf]$ diff httpd.conf httpd.conf_original
+  ～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+< User daemon
+< Group daemon
+---
+> #User daemon
+> #Group daemon
+> User apache
+> Group apache
+
+  対応)現在使用しているhttpd.confにて実行ユーザをapacheに設定する。
+
+[admin@localhost conf]$ sudo sed -i "s|User daemon|User apache|" /usr/local/apache2/conf/httpd.conf
+[admin@localhost conf]$ sudo sed -i "s|Group daemon|Group apache|" /usr/local/apache2/conf/httpd.conf
+
+[admin@localhost conf]$ cat /usr/local/apache2/conf/httpd.conf | grep User
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+User apache
+
+[admin@localhost conf]$ cat /usr/local/apache2/conf/httpd.conf | grep Group
+Group apache
+
+[admin@localhost conf]$ sudo reboot
+
+[admin@localhost ~]$ ps auxwwf
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+apache    1503  0.0  0.2 227848  8912 ?        S    10:34   0:00  \_ /usr/local/apache2/bin/httpd
+apache    1504  0.0  0.2 227848  8912 ?        S    10:34   0:00  \_ /usr/local/apache2/bin/httpd
+apache    1505  0.0  0.2 227848  8912 ?        S    10:34   0:00  \_ /usr/local/apache2/bin/httpd
+apache    1506  0.0  0.2 227848  8912 ?        S    10:34   0:00  \_ /usr/local/apache2/bin/httpd
+apache    1508  0.0  0.2 227848  8912 ?        S    10:34   0:00  \_ /usr/local/apache2/bin/httpd
+
+→実行ユーザがapacheに変更されていることを確認。
+
+[admin@localhost conf]$ ls -ltra
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+-rw----r--.  1 apache apache    48  1月 25 17:35 .htpasswd
+-rw----r--.  1 apache apache   115  1月 26 12:09 .htdigest
+
+[admin@localhost conf]$ sudo chmod 600 .htpasswd .htdigest
+
+[admin@localhost conf]$ ls -ltra
+-rw-------.  1 apache apache    48  1月 25 17:35 .htpasswd
+-rw-------.  1 apache apache   115  1月 26 12:09 .htdigest
+
+→.htpasswdと.htdigestのパーミッションを変更
+(otherにreadを許可するのはセキュリティ上よくないため、消しておく。)
+
+2.HSTSについて(軽く)抑える。
+
+以下サイトについて確認。
+[HTTP Strict Transport Security（HSTS）とは？](https://zenn.dev/ak/articles/dfaa9e01b374a0)
+[HSTS - MDN Web Docs 用語集: ウェブ関連用語の定義 \| MDN](https://developer.mozilla.org/ja/docs/Glossary/HSTS)
+[Strict-Transport-Security - HTTP \| MDN](https://developer.mozilla.org/ja/docs/Web/HTTP/Headers/Strict-Transport-Security)
+
+
+ ※ついでにhttpアクセス時にhttpsにリダイレクトするよう設定を追加
+
+
+・RewriteCondとは、、、
+RewriteRuleにて記述するURL書き換え、転送処理を行う際の条件を記載する。
+
+参考サイト：
+[Apache RewriteCond の基礎知識 \|](https://weblabo.oscasierra.net/apache-rewritecond-base/)
+
+・追加する内容
+  RewriteEngine on
+  RewriteCond %{HTTPS} off
+  #→httpsでない場合に転送する。
+  RewriteRule ^/(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+  #→リクエストしたリソース(HTTP_HOSTの後ろ)を正規表現で取得し、$1に渡してHTTPSのリダイレクト用URIを作る。
+    301コードを返して処理を終了
+
+[admin@localhost extra]$ sudo vim httpd-vhosts.conf
+
+<VirtualHost *:8080>
+    RewriteEngine on
+    RewriteCond %{HTTPS} off
+    RewriteRule ^/(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+</VirtualHost>
+
+→virtualhostにアクセスした際にリダイレクトするよう修正
+
+→以下の通りリダイレクトすることを確認
+
+★リクエストURL
+http://192.168.56.110:8080/index.php
+
+★リダイレクトURL
+https://training.com/index.php
+
+
+3.basic認証をcurlコマンドで通過してみる。(以降コピペでリクエストできるように、、、)
+
+ (1)curl -i -k https://training.com/index.php
+ (2)curl -u auth_test:auth1234 -i -k https://training.com/index.php
+ (3)curl -u auth_test:auth1234 -i -k -L http://192.168.56.110:8080/index.php
+
+　※自己証明なので、kオプションをつけて証明書エラーを無視
+
+　＜実行結果＞
+
+ (1)認証エラー(想定通り)→認証テスト(NGケース)に使用可能
+ (2)リクエスト成功(想定通り)→認証テスト(OKケース)に使用可能
+ (3)認証エラー(想定外)→リダイレクト時は無理だった。
+
+
+
+4.CERファイル作成時、コマンドラインで入力せずに一発でできるようにする。(人為的ミスの防止)
+
+＜やりたいこと。＞
+input用ファイルを渡して秘密鍵→csrファイル→公開鍵をオートに作成するshellを作る。
+
+＜shell情報＞
+1)CSR発行時に要求される項目についてはshell内にて値を設定する。
+  (引数で行うのはCLIの人為ミスの防止という目的にそぐわないため、事前に設定しておく体で作成)
+ 
+2)outputファイルは共通の名前とし、shell実行時に第1引数として渡す。
+  (ex.秘密鍵：server.key、csr：server.csr、公開鍵：server.crt)
+
+3)san設定を行う場合はファイルで行うため、第2引数にフルパスで指定する。
+  (san設定を行わない場合は指定しない。)
+  
+4)引数の数は1つか2つ以外はエラーにする。(上記2)と3))
+
+5)秘密鍵について、パスフレーズなしで作成する。
+
+6)shellの実行はsuperユーザ権限での実行を想定
+
+7)ファイルの出力先はカレントではなく固定する。
+  (一元管理したいため)
+  
+
+＜参考：CSRファイルにて求められるのは以下項目(1/26日作業ログよりコピペ)＞
+
+Country Name (2 letter code) [XX]:JP
+State or Province Name (full name) []:Tokyo
+Locality Name (eg, city) [Default City]:Shibuyaku
+Organization Name (eg, company) [Default Company Ltd]:Training Inc.
+Organizational Unit Name (eg, section) []:Training Section
+Common Name (eg, your name or your server's hostname) []:training.com
+Email Address []:
+  
+Please enter the following 'extra' attributes
+to be sent with your certificate request
+A challenge password []:
+An optional company name []:
+
+参考サイト：
+[【linux】Expectコマンド使用例（書き方備忘録） at softelメモ](https://www.softel.co.jp/blogs/tech/archives/1407)
+
+[admin@localhost .ssl]$ sudo vim create_cert.sh
+
+★ファイル名のみ指定した場合
+[admin@localhost .ssl]$ sudo ./create_cert.sh test
+Generating RSA private key, 2048 bit long modulus
+.....................................................................+++
+...........................................................................................................................................+++
+e is 65537 (0x10001)
+spawn openssl req -new -key test.key -sha256 -out test.csr
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [XX]:JP
+State or Province Name (full name) []:Tokyo
+Locality Name (eg, city) [Default City]:Shibuyaku
+Organization Name (eg, company) [Default Company Ltd]:Training Inc.
+Organizational Unit Name (eg, section) []:Training Section
+Common Name (eg, your name or your server's hostname) []:training.com
+Email Address []:
+
+Please enter the following 'extra' attributes
+to be sent with your certificate request
+A challenge password []:
+An optional company name []:Signature ok
+subject=/C=JP/ST=Tokyo/L=Shibuyaku/O=Training Inc./OU=Training Section/CN=training.com
+Getting Private key
+
+[admin@localhost .ssl]$ ls -ltr test*
+-rw-r--r--. 1 root root 1675  1月 27 15:00 test.key
+-rw-r--r--. 1 root root 1029  1月 27 15:00 test.csr
+-rw-r--r--. 1 root root 1257  1月 27 15:00 test.crt
+
+★ファイル名とsanファイルを指定した場合
+[admin@localhost .ssl]$ sudo ./create_cert.sh test_sun /usr/local/apache2/.ssl/san.txt
+Generating RSA private key, 2048 bit long modulus
+....................+++
+...................................................................+++
+e is 65537 (0x10001)
+spawn openssl req -new -key test_sun.key -sha256 -out test_sun.csr
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN.
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [XX]:JP
+State or Province Name (full name) []:Tokyo
+Locality Name (eg, city) [Default City]:Shibuyaku
+Organization Name (eg, company) [Default Company Ltd]:Training Inc.
+Organizational Unit Name (eg, section) []:Training Section
+Common Name (eg, your name or your server's hostname) []:training.com
+Email Address []:
+
+Please enter the following 'extra' attributes
+to be sent with your certificate request
+A challenge password []:
+An optional company name []:Signature ok
+subject=/C=JP/ST=Tokyo/L=Shibuyaku/O=Training Inc./OU=Training Section/CN=training.com
+Getting Private key
+[admin@localhost .ssl]$ ls -ltr test_sun*
+-rw-r--r--. 1 root root 1679  1月 27 15:02 test_sun.key
+-rw-r--r--. 1 root root 1029  1月 27 15:02 test_sun.csr
+-rw-r--r--. 1 root root 1310  1月 27 15:02 test_sun.crt
+
+[admin@localhost .ssl]$ sudo ./create_cert.sh 1 2 3
+指定された引数は3個です。
+必須：ファイル名　任意：san設定用ファイル
+
+
+---------------------------------------------------------------------------------------
+#!/bin/bash
+
+
+#########################引数チェック###################################
+if [ $# -ne 1 -a $# -ne 2 ]; then
+  echo "指定された引数は$#個です。" 1>&2
+  echo "必須：ファイル名　任意：san設定用ファイル" 1>&2
+  exit 1
+fi
+
+#########################定義部##########################################
+CountryName=JP
+StateOrProvinceName=Tokyo
+LocalityName=Shibuyaku
+OrganizationName="Training Inc."
+OrganizationalUnitName="Training Section"
+CommonName="training.com"
+#EmailAddress=""
+#Achallengepassword=""
+#Anoptionalcompany nam=""
+
+#空値が設定されている変数については使用しないが、設定値を視覚化するため記載しコメントアウト
+
+
+##########################処理部#########################################
+cd /usr/local/apache2/.ssl
+
+openssl genrsa -out $1.key 2048
+
+expect - <<EOS
+spawn openssl req -new -key $1.key -sha256 -out $1.csr
+expect "Country Name (2 letter code)"
+send   "${CountryName}\n"
+
+expect "State or Province Name (full name)"
+send   "${StateOrProvinceName}\n"
+
+expect "Locality Name (eg, city)"
+send   "${LocalityName}\n"
+
+expect "Organization Name (eg, company)"
+send   "${OrganizationName}\n"
+
+expect "Organizational Unit Name (eg, section)"
+send   "${OrganizationalUnitName}\n"
+
+expect "Common Name (eg, your name or your server's hostname)"
+send   "${CommonName}\n"
+
+expect "Email Address"
+send   "\n"
+
+expect "A challenge password"
+send   "\n"
+
+expect "An optional company name"
+send   "\n"
+
+sleep 0.1
+EOS
+
+if [ $# -eq 1 ]; then
+openssl x509 -req -days 365 -sha256 -in $1.csr -signkey $1.key -out $1.crt
+
+elif [ $# -eq 2 ]; then
+openssl x509 -req -days 365 -sha256 -in $1.csr -signkey $1.key -out $1.crt -extfile $2
+
+fi
+
+---------------------------------------------------------------------------------------
+
+
+5.basic認証のほうがdigest認証より望ましいケースについて理解する。(cf:バランサー)
+
+・以下サイトを確認
+
+[Amazon ELB と Digest 認証の組み合わせがうまくいかない \| キュア子の開発ブログ](https://curecode.jp/tech/amazon-elb-and-digest-auth-problem/)
+
+・digest認証のほうが望ましい理由：
+nonceを発行したWEBサーバと違うWEBサーバに振り分けられた際に認証が行われずにエラーになる。
+バランサーにて生成したcookieを使用してバランサー側にて正しい振り分けを行えるように設定すれば接続できそう。
+
+basic認証は平文だがnonceなど個々のWEBサーバに依存しないため、バランサーの設定が不要
+
+
+・wordpress導入続き
+
+フォームに通り記入し、「送信」を押下
+
+データベース名　　　　　：wordpress
+データベースのユーザー名：wp_usr
+データベースのパスワード：xxxxxx
+データベースホスト　　　：localhost:/tmp/mysql.sock(localhostでも実施)
+テーブル接頭辞 　　　　　：wp_
+
+→「このサイトで重大なエラーが発生しました。」と表示 
+  (前と同じ事象。)
+  
+→以下サイトを参考に、ダウンロードしてきたwp-includes/wp-db.phpを修正
+
+1591                 if ( $this->use_mysqli && $this->result instanceof mysqli_result ) {
+1592                         mysqli_free_result( $this->result );
+1593                         $this->result = null;
+
+参考サイト：
+[PHP 8.1 \| WordPress.org](https://wordpress.org/support/topic/php-8-1-4/)
+
+[admin@localhost wp-includes]$ sudo vim wp-db.php
+
+   1623                 /*
+   1624                  * Deprecated in 3.9+ when using MySQLi. No equivalent
+   1625                  * $new_link parameter exists for mysqli_* functions.
+   1626                  */
+   1627                 $new_link     = defined( 'MYSQL_NEW_LINK' ) ? MYSQL_NEW_LINK : true;
+   1628                 $client_flags = defined( 'MYSQL_CLIENT_FLAGS' ) ? MYSQL_CLIENT_FLAGS : 0;
+   1629
+   1630                 if ( $this->use_mysqli ) {
+★ 1631                         mysqli_report(MYSQLI_REPORT_OFF);
+   1632                         $this->dbh = mysqli_init();
+   1633
+
+→★の行を追加
+
+原因：php8.1の仕様。
+MYSQLI_REPORTのデフォルトが以下の通り変更となった。
+
+8.1より前：MYSQLI_REPORT_OFF(レポート機能をオフにする。)
+8.1~     ：MYSQLI_REPORT_ERROR(mysqli の関数呼び出しからのエラーを報告する) 
+           もしくは MYSQLI_REPORT_STRICT(警告の代わりに mysqli_sql_exception をスローする)
+
+WordpressはMySQLiのエラーハンドリングを独自に行うため、MYSQLI_REPORT_OFFにしておく必要がある。
+
+↓[PHP 8.1 \| WordPress.org](https://wordpress.org/support/topic/php-8-1-4/)より引用
+1631             /*
+1632              * Set the MySQLi error reporting off becuase WordPress handles its own.
+1633              * This is due to the defualt value change from 'MYSQLI_REPORT_OFF'
+1634              * to 'MYSQLI_REPORT_ERROR|MYSQLI_REPORT_STRICT' in PHP 8.1
+1635              */
+1636             mysqli_report( MYSQLI_REPORT_OFF );
+
+参考サイト(phpのエラー報告モードについて)：
+[mysqli のエラー報告モードを設定する](https://man.plustar.jp/php/mysqli-driver.report-mode.html)
+
+
+→修正後、画面入力ではなく以前作成したconfigファイルを使用してinstallを行う。
+
+
+config中身
+[admin@localhost training.com]$ less wp-config.php
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+// ** MySQL 設定 - この情報はホスティング先から入手してください。 ** //
+/** WordPress のためのデータベース名 */
+define( 'DB_NAME', 'wordpress' );
+
+/** MySQL データベースのユーザー名 */
+define( 'DB_USER', 'wp_usr' );
+
+/** MySQL データベースのパスワード */
+define( 'DB_PASSWORD', 'xxxxxx' );
+
+/** MySQL のホスト名 */
+define( 'DB_HOST', 'localhost' );
+
+/** データベースのテーブルを作成する際のデータベースの文字セット */
+define( 'DB_CHARSET', 'utf8mb4' );
+
+/** データベースの照合順序 (ほとんどの場合変更する必要はありません) */
+define( 'DB_COLLATE', '' );
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+
+
+→ブラウザにて以下URLにアクセスし、インストールスクリプトを実行。
+https://training.com/wp-admin/install.php
+
+→詳細画面に進むことができたので、以下の通り情報を入力
+
+・サイトのタイトル：training
+・ユーザー名：admin
+・パスワード：xxxxxxx
+・メールアドレス：webmaster@training.com
+
+
+→インストールが問題なく終了
+
+[admin@localhost training.com]$ mysql -u wp_usr -p
+mysql> use wordpress
+mysql> show tables;
++-----------------------+
+| Tables_in_wordpress   |
++-----------------------+
+| wp_commentmeta        |
+| wp_comments           |
+| wp_links              |
+| wp_options            |
+| wp_postmeta           |
+| wp_posts              |
+| wp_term_relationships |
+| wp_term_taxonomy      |
+| wp_termmeta           |
+| wp_terms              |
+| wp_usermeta           |
+| wp_users              |
++-----------------------+
+12 rows in set (0.00 sec)
+
+→念のためdatabaseにアクセスし、テーブルが作成されていることを確認。
+
+→ブラウザにてログイン(管理画面に遷移)しようとした際に以下の通りエラーとなる。
+
+・エラー内容
+エラー: 予期しない出力により Cookie がブロックされました。ヘルプが必要な場合はこちらのドキュメンテーションを参照するか、サポートフォーラムをご利用ください。
+
+→wordpressのdebugモードをonにしているので、画面上に出力されたエラーを確認。
+ (非推奨は省略)
+
+
+・画面上に出力されているエラー内容
+
+Warning: Cannot modify header information - headers already sent by (output started at /var/www/training.com/wp-includes/class-wp-block-list.php:14) in /var/www/training.com/wp-login.php on line 400
+
+Warning: Cannot modify header information - headers already sent by (output started at /var/www/training.com/wp-includes/class-wp-block-list.php:14) in /var/www/training.com/wp-login.php on line 416
+
+Warning: Cannot modify header information - headers already sent by (output started at /var/www/training.com/wp-includes/class-wp-block-list.php:14) in /var/www/training.com/wp-includes/functions.php on line 6712
+
+→Headerが2回送信されていることが原因になっている。
+
+参考サイト：
+[WordPressで「エラー: 予期しない出力により Cookies がブロックされました」が出た時の対処法 \| WordPress修理屋の修理メモ](https://www.locomoco-dou.jp/archives/1820#_8211_debuglog)
+
+https://training.com/wp-login.php
