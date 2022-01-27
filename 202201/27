@@ -466,6 +466,7 @@ Warning: Cannot modify header information - headers already sent by (output star
 Warning: Cannot modify header information - headers already sent by (output started at /var/www/training.com/wp-includes/class-wp-block-list.php:14) in /var/www/training.com/wp-login.php on line 416
 
 Warning: Cannot modify header information - headers already sent by (output started at /var/www/training.com/wp-includes/class-wp-block-list.php:14) in /var/www/training.com/wp-includes/functions.php on line 6712
+(apacheのログにも同じものが出ている。)
 
 →Headerが2回送信されていることが原因になっている。
 
