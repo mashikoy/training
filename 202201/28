@@ -1,0 +1,295 @@
+ [2022/1/28]研修タスクまとめ
+ 
+◆大枠
+ ・wordpress導入続き
+ 
+ ◆wordpressURL
+ https://training.com/wp-login.php
+ 
+ ◆実作業内容
+ 
+ ★昨日までの事象
+・wordpressのインストールまでは完了
+https://training.com/wp-login.php
+
+
+・ログイン画面上に以下エラーが出力される。
+
+Warning: Cannot modify header information - headers already sent by (output started at /var/www/training.com/wp-includes/class-wp-block-list.php:14) in /var/www/training.com/wp-login.php on line 400
+
+Warning: Cannot modify header information - headers already sent by (output started at /var/www/training.com/wp-includes/class-wp-block-list.php:14) in /var/www/training.com/wp-login.php on line 416
+
+Warning: Cannot modify header information - headers already sent by (output started at /var/www/training.com/wp-includes/class-wp-block-list.php:14) in /var/www/training.com/wp-includes/functions.php on line 6712
+(apacheのログにも同じものが出ている。)
+
+→Headerが2回送信されていることが原因になっている。
+ 
+ 
+ [admin@localhost training.com]$ [[ $(head -c 3 wp-config.php) == $'\xef\xbb\xbf' ]] && echo 'has utf8 bom
+ 
+ →自分で中身を修正したwp-config.phpについて、bom付きでないかを確認。(bom付きでなかった。)
+ 
+ bomとは、、、
+ 
+ 参考サイト：
+ [UTF-8のBOM付き・BOM無しの違いと確認方法 \| UX MILK](https://uxmilk.jp/48923)
+ [UTF-8のBOM付き/BOM無しとは？確認方法も紹介！ \| Aprico](https://aprico-media.com/posts/5636)
+ 
+ 
+ [admin@localhost training.com]$ less -N /var/www/training.com/wp-login.php
+    398 nocache_headers();
+    399
+   ★400 header( 'Content-Type: ' . get_bloginfo( 'html_type' ) . '; charset=' . get_bloginfo( 'charset' ) );
+    401
+    402 if ( defined( 'RELOCATE' ) && RELOCATE ) { // Move flag is set.
+    403         if ( isset( $_SERVER['PATH_INFO'] ) && ( $_SERVER['PATH_INFO'] !== $_SERVER['PHP_SELF'] ) ) {
+    404                 $_SERVER['PHP_SELF'] = str_replace( $_SERVER['PATH_INFO'], '', $_SERVER['PHP_SELF'] );
+    405         }
+    406
+    407         $url = dirname( set_url_scheme( 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['PHP_SELF'] ) );
+    408
+    409         if ( get_option( 'siteurl' ) !== $url ) {
+    410                 update_option( 'siteurl', $url );
+    411         }
+    412 }
+    413
+    414 // Set a cookie now to see if they are supported by the browser.
+    415 $secure = ( 'https' === parse_url( wp_login_url(), PHP_URL_SCHEME ) );
+    ★416 setcookie( TEST_COOKIE, 'WP Cookie check', 0, COOKIEPATH, COOKIE_DOMAIN, $secure );
+    417
+    418 if ( SITECOOKIEPATH !== COOKIEPATH ) {
+    419         setcookie( TEST_COOKIE, 'WP Cookie check', 0, SITECOOKIEPATH, COOKIE_DOMAIN, $secure );
+    420 }
+
+[admin@localhost training.com]$ less -N /var/www/training.com/wp-includes/functions.php
+   6704 /**
+   6705  * Send a HTTP header to limit rendering of pages to same origin iframes.
+   6706  *
+   6707  * @since 3.1.3
+   6708  *
+   6709  * @see https://developer.mozilla.org/en/the_x-frame-options_response_header
+   6710  */
+   6711 function send_frame_options_header() {
+   ★6712         header( 'X-Frame-Options: SAMEORIGIN' );
+   6713 }
+   6714
+   6715 /**
+
+[admin@localhost wp-includes]$ less -N /var/www/training.com/wp-includes/class-wp-block-list.php
+      1 <?php
+      2 /**
+      3  * Blocks API: WP_Block_List class
+      4  *
+      5  * @package WordPress
+      6  * @since 5.5.0
+      7  */
+      8
+      9 /**
+     10  * Class representing a list of block instances.
+     11  *
+     12  * @since 5.5.0
+     13  */
+     ★14 class WP_Block_List implements Iterator, ArrayAccess, Countable {
+     15
+     
+[admin@localhost wp-includes]$ sudo vim class-wp-block-list.php
+     
+      1 <?php
+      2 /**
+      3  * Blocks API: WP_Block_List class
+      4  *
+      5  * @package WordPress
+      6  * @since 5.5.0
+      7  */
+      8 /**
+      9  * Class representing a list of block instances.
+     10  *
+     11  * @since 5.5.0
+     12  */
+     13 class WP_Block_List implements Iterator, ArrayAccess, Countable {
+     14         /**
+
+→8行目・15行目にあった空行を削除しブラウザアクセス。
+
+[Fri Jan 28 12:13:00.792980 2022] [php:warn] [pid 1500] [client 192.168.56.1:60895] PHP Warning:  Cannot modify header information - headers already sent by (output started at /var/www/training.com/wp-includes/class-wp-block-list.php:13) in /var/www/training.com/wp-login.php on line 400
+[Fri Jan 28 12:13:00.793083 2022] [php:warn] [pid 1500] [client 192.168.56.1:60895] PHP Warning:  Cannot modify header information - headers already sent by (output started at /var/www/training.com/wp-includes/class-wp-block-list.php:13) in /var/www/training.com/wp-login.php on line 416
+[Fri Jan 28 12:13:00.793106 2022] [php:warn] [pid 1500] [client 192.168.56.1:60895] PHP Warning:  Cannot modify header information - headers already sent by (output started at /var/www/training.com/wp-includes/class-wp-block-list.php:13) in /var/www/training.com/wp-includes/functions.php on line 6712
+
+→特に変わらない。
+
+補足：
+phpは<?php と ?>で囲まれていない内容は全て出力となる。
+phpの中の空行に関する考慮は無駄だった。
+
+[admin@localhost wp-includes]$ sudo cp class-wp-block-list.php_bak class-wp-block-list.php
+
+→影響のある修正は行っていないが、念のため戻し
+
+
+[admin@localhost training.com]$ file wp-config.php
+wp-config.php: PHP script, UTF-8 Unicode text, with CRLF line terminators
+
+→vimで修正したが改行コードがCRLFになっている。
+
+[admin@localhost training.com]$ sudo nkf -Lu --overwrite wp-config.php
+[admin@localhost training.com]$ file wp-config.php
+wp-config.php: PHP script, UTF-8 Unicode text
+
+→windows改行コードが消えていることを確認。
+
+→画面を再表示してもエラーは残っていることを確認。
+
+[admin@localhost training.com]$ vim ~/ch_file_type.sh
+
+#!/bin/bash
+find /var/www/training.com -type f | while read FILE
+do
+    nkf -Lu -w --overwrite ${FILE}
+done
+
+[admin@localhost training.com]$ chmod 755 /home/admin/ch_file_type.sh
+[admin@localhost training.com]$ sudo /home/admin/ch_file_type.sh
+
+→/var/www/training.com以下の全ファイルについて、windows改行コードを修正しUTF-8に修正
+ (wordpressの標準文字コードがUTF-8のため。)
+
+→画面を再表示してもエラーは残っていることを確認。
+
+
+変更してみたパラメータ：
+
+1.php.iniのバッファをonにする(offにしていた　※デフォルト)
+2.php.iniのerror出力をoffにする(onにしていた　※デフォルト)
+3.wp.configのdebugをoffにする(onにしていた　※config作成時に指定)
+
+sedコマンド(設定on)
+1.sudo sed -i "s|output_buffering = Off|output_buffering = On|" /usr/local/lib/php.ini
+2.sudo sed -i "s|display_errors = Off|display_errors = On|" /usr/local/lib/php.ini　※デフォルト
+3.sudo sed -i "s|define( 'WP_DEBUG', false );|define( 'WP_DEBUG', true );|" /var/www/training.com/wp-config.php
+
+sed戻しコマンド(設定off)
+1.sudo sed -i "s|output_buffering = On|output_buffering = Off|" /usr/local/lib/php.ini　※デフォルト
+2.sudo sed -i "s|display_errors = On|display_errors = Off|" /usr/local/lib/php.ini
+3.sudo sed -i "s|define( 'WP_DEBUG', true );|define( 'WP_DEBUG', false );|" /var/www/training.com/wp-config.php
+
+→ログイン時、https://training.com/wp-admin(ディレクトリ)にアクセスすることはできた。
+
+原因について：
+上記1,2については設定を戻した上で実行したが、問題なく管理者画面にアクセスできた。(iniファイルの再読み込みも行った。)
+3のWP_DEBUGが邪魔をしていただけだった。
+
+Index of /wp-admin
+
+Parent Directory
+about.php
+admin-ajax.php
+admin-footer.php
+admin-functions.php
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+index.php
+
+→wp-adminディレクトリ内のファイル一覧からindex.phpを選択することで管理者画面にアクセスできた。
+　URL：https://training.com/wp-admin/index.php
+
+[admin@localhost www]$ sudo cp -r training.com training.com_origin_iroirosyusei
+[admin@localhost www]$ sudo cp -r training.com_origin training.com
+
+→training.com内のphpプログラムを色々修正していたため、戻す。
+
+※再度アクセスして、管理者画面にアクセスできることを確認。
+
+補足：ログイン時の挙動について
+
+＜想定＞ログイン実行→管理者画面にアクセス。
+＜実態:debugモードon＞ログイン実行→wp-adminにアクセス→(index.phpを選択して)管理者画面にアクセス。
+
+＜そのあと確認した挙動＞
+
+※セッションが切れている状態で
+https://training.com/wp-admin
+→index.phpを選択
+→login画面にリダイレクトされる
+→ログイン情報を入力し、ログイン
+→ダッシュボードに自動的にアクセスできた。
+
+＜結論＞
+pndex.phpに遷移するためのパラメータを指定していなかった。
+https://training.com/wp-login.php?redirect_to=https%3A%2F%2Ftraining.com%2Fwp-admin%2Findex.php&reauth=1
+
+指定しないと、認証はできているため手動でindex.phpにアクセスを試行してもはじかれないがwp-login.phpの(おそらく)以下条件にてwp-admin(ディレクトリ)に飛ばされる。
+
+[admin@localhost training.com]$ less wp-login.php
+                if ( ! empty( $_REQUEST['redirect_to'] ) ) {
+                        $redirect_to = $_REQUEST['redirect_to'];
+                } else {
+                        $redirect_to = admin_url();
+                }
+
+
+・testページ作成および更新時、以下のエラーが出る。
+
+公開に失敗しました。 返答が正しい JSON レスポンスではありません。
+
+
+[admin@localhost training.com]$ less .htaccess
+# BEGIN WordPress
+# "BEGIN WordPress" から "END WordPress" までのディレクティブ (行) は
+# 動的に生成され、WordPress フィルターによってのみ修正が可能です。
+# これらのマーカー間にあるディレクティブへのいかなる変更も上書きされてしまいます。
+
+# END WordPress
+...skipping...
+
+→現在のhtaccessファイルにmod_rewriteの設定がない。
+
+補足：
+パーマリンクの設定で、リンク設定がplain(基本)の時はかかれない仕様となっているため
+plain以外で選択。
+(今回はNumeric(https://training.com/archives/123)を選択。)
+
+[admin@localhost training.com]$ less .htaccess
+
+# BEGIN WordPress
+# The directives (lines) between "BEGIN WordPress" and "END WordPress" are
+# dynamically generated, and should only be modified via WordPress filters.
+# Any changes to the directives between these markers will be overwritten.
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+
+Rewrite系の意味・設定内容について抑える。
+
+# END WordPress
+
+→保存後.htaccessが更新されていることを確認。
+
+
+[admin@localhost extra]$ less httpd-vhosts.conf
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride All
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+
+→.htaccessの内容が反映されるようになっていることを確認。
+
+
+[ワードプレスで保存すると「返答が正しい JSON レスポンスではありません」となり見出しが自動下書きとなる現象に対処 \| ホームページ制作　オフィスオバタ](https://office-obata.com/report/memorandum/post-4050/)
+
+→再度testページ作成を作成しようとするが、同じエラーが出る。
+
+公開に失敗しました。 返答が正しい JSON レスポンスではありません。
+
+※plainの時にrewriteの設定が消えるのは仕様として正しいので、おそらく違う原因によりエラーになっている
+
+
+
+★php8.1について
+MYSQLI_REPORTのデフォルト値など、たまにwordpressが対応していない変更などもあるので
+バージョンをさげた上で再構築予定。
