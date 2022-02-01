@@ -1,0 +1,723 @@
+ [2022/2/1]研修タスクまとめ
+ 
+◆大枠
+ ・記事の自動投稿設定
+ 
+◆処理概要
+
+＜前提＞
+・インポートデータをダウンロードしてきて管理者画面からインポートすることはしない。
+
+＜手順＞
+・shellでcsvファイルを作成する。
+・phpでcsvファイルの取り込みを行う。
+
+
+・参考サイト(実装方法)：
+[PHPによるWordpressの自動投稿 \| ハックノート](https://hacknote.jp/archives/52533/)
+
+[【3分で完了】WordPressで記事を自動生成する方法 \| しのブログ](https://webstyle.work/wordpress-article-auto-made/)
+
+[CSVファイルでWordPressに一括投稿 \| Bambooo!](https://bambooo.jp/tips/1503.html)
+
+・参考サイト(DBにinsertする際の項目)：
+[関数リファレンス/wp insert post - WordPress Codex 日本語版](https://wpdocs.osdn.jp/%E9%96%A2%E6%95%B0%E3%83%AA%E3%83%95%E3%82%A1%E3%83%AC%E3%83%B3%E3%82%B9/wp_insert_post#.E3.83.91.E3.83.A9.E3.83.A1.E3.83.BC.E3.82.BF)
+
+＜概要設計＞
+件名→'testn'とする。　※nは1から始まりインクリメントする。
+本文→'test'*nとする　※nは1から始まりインクリメントする。
+タグ→'test'　※固定
+
+例)
+件名：test3
+本文：testtesttest
+
+記事件数は引数で指定
+
+＜備考＞
+内部構造の理解のため、作業前後でテーブル内容の比較を行う。
+
+
+◆実作業手順
+
+[admin@localhost wp-admin]$ pwd
+/var/www/training.com/wp-admin
+[admin@localhost wp-admin]$ sudo mkdir auto_posting
+
+→PGM格納用のディレクトリを作成
+
+[admin@localhost auto_posting]$ sudo vim auto_post.php
+[admin@localhost auto_posting]$ sudo vim  make_csv.sh
+[admin@localhost auto_posting]$ sudo chmod 755 make_csv.sh
+[admin@localhost auto_posting]$ sudo chown apache:apache ./*
+
+→投稿記事をcsv形式で作成するshellとshellを取り込むphpファイルを作成。
+
+●shellの中身
+
+#!/bin/sh
+
+CSV_FILE=data.csv
+
+for i in `seq $1`
+do
+
+#title
+echo -n "test${i}," >> $CSV_FILE
+
+#contents
+  for j in `seq $i`
+  do
+      echo -n  test >> $CSV_FILE
+  done
+
+#投稿終了
+echo >> $CSV_FILE
+
+done
+
+●php中身
+<?php
+require('../../wp-blog-header.php');
+$file = new SplFileObject('data.csv'); //csvファイルの読み込み
+#$file = new SplFileObject('sample.csv'); //csvファイルの読み込み
+$file->setFlags(SplFileObject::READ_CSV);
+foreach ($file as $line) {
+    $records[] = $line;
+}
+
+#var_dump($records); //出力（出力したい情報）
+for ($i=0 ; $i<count($records);$i++){
+    $date = date("Y/m/d H:i:s",strtotime("+9 hour"));
+    $post_value = array(
+        'post_title' => $records[$i][0], //post title
+        'post_content' => $records[$i][1], //post content
+        'post_status' => 'publish', //公開ステータス
+        'tags_input' => 'test', //tag
+        'post_date' => $date //date
+    );
+
+    wp_insert_post($post_value);
+
+}
+
+echo "投稿一覧:https://training.com/wp-admin/edit.php"
+?>
+
+
+・自動更新実施
+
+[admin@localhost auto_posting]$ sudo ./make_csv.sh 1000
+
+→csv作成(1000を指定して、1000記事作成)
+
+＜事前作業：1000記事投稿前にデータベースの状態を確認＞
+<https://wpmake.jp/contents/security/database/#wp_postmeta
+
+mysql> use wordpress
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+
+mysql> show tables;
++-----------------------+
+| Tables_in_wordpress   |
++-----------------------+
+| wp_commentmeta        |
+| wp_comments           |
+| wp_links              |
+| wp_options            |
+| wp_postmeta           |
+| wp_posts              |
+| wp_term_relationships |
+| wp_term_taxonomy      |
+| wp_termmeta           |
+| wp_terms              |
+| wp_usermeta           |
+| wp_users              |
++-----------------------+
+12 rows in set (0.00 sec)
+
+mysql> select count(*) from wp_commentmeta
+    -> ;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+1 row in set (0.00 sec)
+
+mysql> select count(*) from wp_comments;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+1 row in set (0.00 sec)
+
+mysql> select * from wp_comments\G
+*************************** 1. row ***************************
+          comment_ID: 1
+     comment_post_ID: 1
+      comment_author: WordPress コメントの投稿者
+comment_author_email: wapuu@wordpress.example
+  comment_author_url: https://wordpress.org/
+   comment_author_IP:
+        comment_date: 2022-01-31 16:14:33
+    comment_date_gmt: 2022-01-31 07:14:33
+     comment_content: こんにちは、これはコメントです。
+コメントの承認、編集、削除を始めるにはダッシュボードの「コメント画面」にアクセスしてください。
+コメントのアバターは「<a href="https://gravatar.com">Gravatar</a>」から取得されます。
+       comment_karma: 0
+    comment_approved: 1
+       comment_agent:
+        comment_type: comment
+      comment_parent: 0
+             user_id: 0
+1 row in set (0.00 sec)
+
+mysql> select count(*) from wp_links;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+1 row in set (0.00 sec)
+
+→リンクに関するデータを管理
+
+mysql> select count(*) from wp_options;
++----------+
+| count(*) |
++----------+
+|      154 |
++----------+
+1 row in set (0.07 sec)
+
+mysql> select * from wp_links limit 10;
+Empty set (0.00 sec)
+
+→初期設定や管理者画面での設定内容が保存されるテーブル。
+ 記事投稿には関係なさそうなので、とりあえず10行表示
+
+mysql> select * from wp_options limit 10\G
+*************************** 1. row ***************************
+   option_id: 1
+ option_name: siteurl
+option_value: https://training.com
+    autoload: yes
+*************************** 2. row ***************************
+   option_id: 2
+ option_name: home
+option_value: https://training.com
+    autoload: yes
+*************************** 3. row ***************************
+   option_id: 3
+ option_name: blogname
+option_value: training
+    autoload: yes
+*************************** 4. row ***************************
+   option_id: 4
+ option_name: blogdescription
+option_value: トレーニング用サイト
+    autoload: yes
+*************************** 5. row ***************************
+   option_id: 5
+ option_name: users_can_register
+option_value: 0
+    autoload: yes
+*************************** 6. row ***************************
+   option_id: 6
+ option_name: admin_email
+option_value: webmaster@training.com
+    autoload: yes
+*************************** 7. row ***************************
+   option_id: 7
+ option_name: start_of_week
+option_value: 1
+    autoload: yes
+*************************** 8. row ***************************
+   option_id: 8
+ option_name: use_balanceTags
+option_value: 0
+    autoload: yes
+*************************** 9. row ***************************
+   option_id: 9
+ option_name: use_smilies
+option_value: 1
+    autoload: yes
+*************************** 10. row ***************************
+   option_id: 10
+ option_name: require_name_email
+option_value: 1
+    autoload: yes
+10 rows in set (0.00 sec)
+
+mysql> select count(*) from wp_postmeta;
++----------+
+| count(*) |
++----------+
+|        4 |
++----------+
+1 row in set (0.08 sec)
+
+mysql> select * from wp_postmeta\G
+*************************** 1. row ***************************
+   meta_id: 1
+   post_id: 2
+  meta_key: _wp_page_template
+meta_value: default
+*************************** 2. row ***************************
+   meta_id: 2
+   post_id: 3
+  meta_key: _wp_page_template
+meta_value: default
+*************************** 3. row ***************************
+   meta_id: 3
+   post_id: 1
+  meta_key: _edit_lock
+meta_value: 1643614350:1
+*************************** 4. row ***************************
+   meta_id: 4
+   post_id: 6
+  meta_key: _edit_lock
+meta_value: 1643614933:1
+4 rows in set (0.00 sec)
+
+→プラグインなど、投稿に機能を追加する際に更新される。
+
+
+
+mysql> select count(*) from wp_posts;
++----------+
+| count(*) |
++----------+
+|        9 |
++----------+
+1 row in set (0.11 sec)
+
+mysql> select * from wp_posts\G
+
+※長い記事もあるので、1行だけ
+
+*************************** 1. row ***************************
+                   ID: 1
+          post_author: 1
+            post_date: 2022-01-31 16:14:33
+        post_date_gmt: 2022-01-31 07:14:33
+         post_content: <!-- wp:paragraph -->
+<p>WordPress へようこそ。こちらは最初の投稿です。編集または削除し、コンテンツ作成を始めてください。</p>
+<!-- /wp:paragraph -->
+           post_title: Hello world!
+         post_excerpt:
+          post_status: publish
+       comment_status: open
+          ping_status: open
+        post_password:
+            post_name: hello-world
+              to_ping:
+               pinged:
+        post_modified: 2022-01-31 16:14:33
+    post_modified_gmt: 2022-01-31 07:14:33
+post_content_filtered:
+          post_parent: 0
+                 guid: https://training.com/?p=1
+           menu_order: 0
+            post_type: post
+       post_mime_type:
+        comment_count: 1
+        
+→実際の投稿データ
+ post_contentはエンジンによって扱いが異なりそう。
+ (Memoryエンジンの場合はディスク側の一時表領域を使用することがある可能性があるため、
+ パフォーマンスに影響でたり、、？　※今はほとんどInnoDBだからおそらく大丈夫。)
+
+mysql> select count(*) from wp_term_relationships;
++----------+
+| count(*) |
++----------+
+|        2 |
++----------+
+1 row in set (0.08 sec)
+
+mysql> select * from wp_term_relationships;
++-----------+------------------+------------+
+| object_id | term_taxonomy_id | term_order |
++-----------+------------------+------------+
+|         1 |                1 |          0 |
+|         5 |                2 |          0 |
++-----------+------------------+------------+
+2 rows in set (0.00 sec)
+
+→投稿とカテゴリ・タグを紐付けている。
+
+mysql> select count(*) from wp_term_taxonomy;
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
+1 row in set (0.08 sec)
+
+mysql> select * from wp_term_taxonomy;
++------------------+---------+----------+-------------+--------+-------+
+| term_taxonomy_id | term_id | taxonomy | description | parent | count |
++------------------+---------+----------+-------------+--------+-------+
+|                1 |       1 | category |             |      0 |     1 |
+|                2 |       2 | wp_theme |             |      0 |     1 |
+|                3 |       3 | post_tag |             |      0 |     0 |
++------------------+---------+----------+-------------+--------+-------+
+3 rows in set (0.00 sec)
+
+→wp_termに保存されている語句がカテゴリなのか？タグなのか？といった情報を持ってる。
+
+
+mysql> select count(*) from wp_termmeta;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+1 row in set (0.00 sec)
+
+→プラグインや個別にカスタマイズする際に利用することができる。
+　※カスタムフィールドとか？
+
+mysql> select count(*) from wp_terms;
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
+1 row in set (0.07 sec)
+
+mysql> select * from wp_terms;
++---------+-----------------+-----------------+------------+
+| term_id | name            | slug            | term_group |
++---------+-----------------+-----------------+------------+
+|       1 | 未分類          | uncategorized   |          0 |
+|       2 | twentytwentytwo | twentytwentytwo |          0 |
+|       3 | test            | test            |          0 |
++---------+-----------------+-----------------+------------+
+3 rows in set (0.00 sec)
+
+→カテゴリやタグの名前とスラッグを保存している。
+
+mysql> select count(*) from wp_usermeta;
++----------+
+| count(*) |
++----------+
+|       23 |
++----------+
+1 row in set (0.08 sec)
+
+
+mysql> select * from wp_usermeta\G
+*************************** 1. row ***************************
+  umeta_id: 1
+   user_id: 1
+  meta_key: nickname
+meta_value: admin
+*************************** 2. row ***************************
+  umeta_id: 2
+   user_id: 1
+  meta_key: first_name
+meta_value:
+*************************** 3. row ***************************
+  umeta_id: 3
+   user_id: 1
+  meta_key: last_name
+meta_value:
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+
+→ユーザに関するメタデータ・権限を定義している。
+ (1ユーザ(admin)しかいないので、1ユーザについて23行分色々設定していた。)
+ 
+ mysql> select count(*) from wp_users;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+1 row in set (0.09 sec)
+ 
+ mysql> select * from wp_users\G
+*************************** 1. row ***************************
+                 ID: 1
+         user_login: admin
+          user_pass: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+      user_nicename: admin
+         user_email: webmaster@training.com
+           user_url: https://training.com
+    user_registered: 2022-01-31 07:14:33
+user_activation_key:
+        user_status: 0
+       display_name: admin
+1 row in set (0.00 sec)
+
+→ユーザ情報を保管。
+
+
+・参考サイト：
+[WordPressのデータベースの中身はどうなっているのか？ \| wp.geek](https://wpmake.jp/contents/security/database/#wp_postmeta)
+
+[admin@localhost auto_posting]$ php auto_post.php
+
+→自動投稿実施。
+
+
+＜事後作業：1000記事投稿後にデータベースの状態を確認
+　※更新のあったテーブルは★をつけている＞
+
+mysql> select count(*) from wp_commentmeta;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+1 row in set (0.00 sec)
+
+→変わらず。(コメントいれてないから。)
+
+mysql> select count(*) from wp_comments;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+1 row in set (0.00 sec)
+
+→変わらず。(コメントいれてないから。)
+
+mysql> select count(*) from wp_links;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+1 row in set (0.00 sec)
+
+→変わらず。
+
+mysql> select count(*) from wp_options;
++----------+
+| count(*) |
++----------+
+|      154 |
++----------+
+1 row in set (0.08 sec)
+
+→変わらず
+
+★mysql> select count(*) from wp_postmeta;
++----------+
+| count(*) |
++----------+
+|     2006 |
++----------+
+1 row in set (0.16 sec)
+
+→wordpressが内部的に使用している投稿ごとのメタデータ。
+ 今回の投稿内容は1投稿あたり2レコード作成されているため、約2,000行となっている。
+ (以下サンプル)
+ 
+mysql> select * from wp_postmeta limit 10\G
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+*************************** 9. row ***************************
+   meta_id: 10462
+   post_id: 4167
+  meta_key: _pingme
+meta_value: 1
+*************************** 10. row ***************************
+   meta_id: 10463
+   post_id: 4167
+  meta_key: _encloseme
+
+★mysql> select count(*) from wp_posts;
++----------+
+| count(*) |
++----------+
+|     1009 |
++----------+
+1 row in set (0.08 sec)
+
+→投稿データ。
+記事はここから持ってきてる。
+ (以下サンプル)
+ 
+mysql> select * from wp_posts where post_name='test50'\G
+*************************** 1. row ***************************
+                   ID: 4214
+          post_author: 0
+            post_date: 2022-02-01 15:14:47
+        post_date_gmt: 2022-02-01 06:14:47
+         post_content: testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest
+           post_title: test50
+         post_excerpt:
+          post_status: publish
+       comment_status: open
+          ping_status: open
+        post_password:
+            post_name: test50
+              to_ping:
+               pinged:
+        post_modified: 2022-02-01 15:14:47
+    post_modified_gmt: 2022-02-01 06:14:47
+post_content_filtered:
+          post_parent: 0
+                 guid: https://training.com/2022/02/test50/
+           menu_order: 0
+            post_type: post
+       post_mime_type:
+        comment_count: 0
+1 row in set (0.00 sec)
+
+
+★mysql> select count(*) from wp_term_relationships;
++----------+
+| count(*) |
++----------+
+|     2002 |
++----------+
+1 row in set (0.08 sec)
+
+→新しく作成した投稿のタグ・カテゴリを紐づけている。
+ (1投稿　カテゴリ：未分類　タグ：testが紐づいているため約2000行できている。
+ 以下サンプル)
+
+mysql> select * from wp_term_relationships limit 20\G
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+*************************** 17. row ***************************
+       object_id: 4172
+term_taxonomy_id: 1
+      term_order: 0
+*************************** 18. row ***************************
+       object_id: 4172
+term_taxonomy_id: 3
+      term_order: 0
+*************************** 19. row ***************************
+
+
+mysql> select count(*) from wp_term_taxonomy;
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
+1 row in set (0.06 sec)
+
+→変わらず
+
+
+mysql> select count(*) from wp_termmeta;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+1 row in set (0.00 sec)
+
+→変わらず
+
+
+
+mysql> select count(*) from wp_terms;
++----------+
+| count(*) |
++----------+
+|        3 |
++----------+
+1 row in set (0.07 sec)
+
+→変わらず
+
+mysql> select count(*) from wp_usermeta;
++----------+
+| count(*) |
++----------+
+|       23 |
++----------+
+1 row in set (0.18 sec)
+
+mysql> select count(*) from wp_users;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+1 row in set (0.08 sec)
+
+→変わらず
+
+
+◆結論：投稿時に更新されるデータについて
+1)wp_postmeta
+2)wp_posts
+3)wp_term_relationships
+
+
+
+◆自動投稿実施時、以下Wariningが出た。
+
+PHP Warning:  Undefined array key "REQUEST_METHOD" in /var/www/training.com/wp-includes/template-loader.php on line 26
+
+Warning: Undefined array key "REQUEST_METHOD" in /var/www/training.com/wp-includes/template-loader.php on line 26
+
+→ブラウザではなくコマンドラインで実行したため。
+以下の通り環境変数を設定したらエラーがでなくなった。
+(PHPをコマンドラインで実行している場合は使用できる要素に制限がある。REQUEST_METHODはクライアントからのHTTPリクエストをもとにサーバ側で作成する情報なので、今回Warningがでた。)
+[PHP: $_SERVER - Manual](https://www.php.net/manual/ja/reserved.variables.server.php#:~:text=%24_SERVER%20%E3%81%AF%E3%80%81%E3%83%98%E3%83%83%E3%83%80%E3%80%81%E3%83%91%E3%82%B9,%E3%81%99%E3%82%8B%E5%8F%AF%E8%83%BD%E6%80%A7%E3%81%8C%E3%81%82%E3%82%8A%E3%81%BE%E3%81%99%E3%80%82)
+
+[admin@localhost auto_posting]$ export REQUEST_METHOD=GET
+
+
+
+PHP Warning:  Undefined array key 1 in /var/www/training.com/wp-admin/auto_posting/auto_post.php on line 15
+
+Warning: Undefined array key 1 in /var/www/training.com/wp-admin/auto_posting/auto_post.php on line 15
+
+→var_dumpを確認したら、csvファイルから作成する配列に変なデータがあった。
+array(3) {
+  [0]=>
+  array(2) {
+    [0]=>
+    string(6) "sample"
+    [1]=>
+    string(9) "sample111"
+  }
+  [1]=>
+  array(2) {
+    [0]=>
+    string(7) "sample2"
+    [1]=>
+    string(9) "sample222"
+  }
+  [2]=>
+  array(1) {
+    [0]=>
+    NULL
+  }
+
+★inputファイル(csvファイル)
+sample,sample111
+sample2,sample222[EOF]
+
+→値が空の配列が来たら何もしないハンドリングを追加してWarningを消す？
+
+
+・参考サイト(サーバ変数について)：
+[【PHP】$_SERVERサーバ変数 - Qiita](https://qiita.com/Chelsea/items/0f910dba0b4d3031a871)
+
+[: PHPでは、コマンドラインからコードが実行されていることをどのように検出できますか？](https://ja.pacificabahai.org/984962-in-php-how-can-i-HLDAVP)
+
+
+★追加でやること。
+
+1.rssフィードを見つけてwgetで取得する。(yahooニュースとかメディア系の記事　※)
+2.shellで加工してwpに表示
+
+本文記事のあるものがよい。([NHKニュース](https://www.nhk.or.jp/rss/news/cat0.xml))
+
+<https://www.nhk.or.jp/rss/news/cat0.xml>
