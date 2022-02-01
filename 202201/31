@@ -1,0 +1,160 @@
+ [2022/1/31]研修タスクまとめ
+ 
+◆大枠
+ 1.phpの再導入
+ 2.wordpress
+
+◆実作業手順(今までと違う手順のみ抜粋)
+
+・CSR発行時、subjオプションを指定して作成。
+
+[admin@localhost extra]$ sudo openssl genrsa -out server.key 2048
+
+★[admin@localhost extra]$ sudo openssl req -new -key server.key -sha256 -out server.csr -subj "/C=JP/ST=Tokyo/L=Shibuyaku/O=Training Inc./OU=Training Section/CN=training.com"
+
+[admin@localhost extra]$ sudo openssl x509 -req -days 365 -sha256 -in server.csr -signkey server.key -out server.crt -extfile san.txt
+
+→★をつけた箇所だけ違う。
+
+
+wordpress：
+データベース接続情報について、、、
+
+DB_HOSTがlocalhost→接続エラー
+
+DB_HOSTが127.0.0.1→接続できた。
+
+(事後原因確認)
+
+localhostでエラーの場合はsocketファイルがないためエラーとなっている可能性があるが、sockerファイルの位置については定義済み+動作確認済み
+
+mysql> select * from mysql.user\G
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+Host: %
+User: wp_usr
+
+→wp_usrのHostが%になっているため、localhostに修正した上でconfigファイルの修正を行う。
+
+mysql> rename user wp_usr@'%' to wp_usr@'localhost';
+*************************** 7. row ***************************
+Host: localhost
+User: wp_usr
+
+sudo sed -i  "s|define( 'DB_HOST', '127.0.0.1' );|define( 'DB_HOST', 'localhost' );|" /var/www/training.com/wp-config.php
+
+→まだ確認できず、、、
+ 以下が原因になっていそう。
+ 
+ ※apacheの自動起動設定
+
+[phpmyadmin,WordPress　localhostだと接続できない。（127.0.0.1はOK）](https://teratail.com/questions/103407)
+[systemd�ˤ�� /tmp, /var/tmp �ؤ�����](http://www.kunitake.org/chalow/2015-11-24-1.html)
+
+
+[admin@localhost extra]$ sudo sed -i "s|PrivateTmp=true|PrivateTmp=false|" /etc/systemd/system/httpd.service
+
+→systemd設定の、PrivateTmpをtrueからfalseに変更する
+
+→接続できた。
+
+補足：pricateTmpについて、、、
+
+Linuxカーネルのnamespace機能を使用してリソースの分離を行う。
+今回でいえば、/tmpディレクトリをapacheにしか見れないように分離するため、socketファイルが認識されなくなり接続ができなかった。
+セキュリティ上望ましい構成ではないが、今回は個人用仮想環境なのでfalseにした。
+本番ではWEB/AP/DBは分離することになるのでtrueでも今回のようなエラーは生じない。
+
+[Linux namespace入門 - mmash -h](https://mmash-h.hatenablog.com/entry/2019/10/19/220018)
+
+◆必要情報
+
+サイトのタイトル：training
+ユーザー名：admin
+パスワード：xxxxxxxxxxxxxxxxx
+メールアドレス：webmaster@training.com
+
+
+◆ログインURL
+https://training.com/wp-login.php?redirect_to=https%3A%2F%2Ftraining.com%2Fwp-admin%2Findex.php&reauth=1
+
+
+・投稿時、エディタをクラシックエディタに変更したら投稿できた。
+
+wordpress5.xx以降はブロックエディタがデフォルト(Gutenberg（グーテンベルグ）)
+
+→ブロックエディタで投稿できない理由、、、
+ブロックエディタを使用するとWP-API経由で非同期通信を行う。
+
+★デフォルトのindex.phpだったら動くかもしれないので、要確認
+
+
+[WP5.0で保存ができない。（クラシックエディターからの移行） – WordPress テーマ Snow Monkey](https://snow-monkey.2inc.org/forums/topic/wp5-0%E3%81%A7%E4%BF%9D%E5%AD%98%E3%81%8C%E3%81%A7%E3%81%8D%E3%81%AA%E3%81%84%E3%80%82%EF%BC%88%E3%82%AF%E3%83%A9%E3%82%B7%E3%83%83%E3%82%AF%E3%82%A8%E3%83%87%E3%82%A3%E3%82%BF%E3%83%BC%E3%81%8B/)
+
+・投稿後、投稿内容が表示できなかった。
+ (事後追記：wordpressが用意しているindex.phpを自分のindex.phpで上書きしていた。)
+
+[admin@localhost extra]$ less httpd-vhosts.conf
+
+<VirtualHost *:443>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+    #ssl setting
+    SSLEngine on
+    SSLProtocol +TLSv1.2
+    SSLCertificateFile /usr/local/apache2/.ssl/server.crt
+    SSLCertificateKeyFile /usr/local/apache2/.ssl/server.key
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+      ★AllowOverride All
+       Require all granted
+
+    #Basic Authentication config
+
+       #AuthType Basic
+       #AuthName "Basic Authentication"
+       #AuthUserFile /usr/local/apache2/conf/.htpasswd
+       #require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+→vhostのAllowOverrideｈがAllになっていることを確認。
+
+
+[admin@localhost training.com]$ less .htaccess
+
+# これらのマーカー間にあるディレクティブへのいかなる変更も上書きされてしまいます。
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+
+→自動で作成された.htaccessの内容を確認。
+
+RewriteBase /　→/var/www/training.com
+RewriteRule ^index\.php$ - [L] →index.phpを指定していたらrewrite終了
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]　　　　　→リクエストするファイルやスクリプトのパスがなかったらindex.phpを返して終了
+
+
+→今回の挙動はたとえば
+https://training.com/archives/7
+のようなリクエストを送り、一致するディレクトリやファイルがないためindex.phpを返している。
+
+→ここでデフォルトのindex.phpが存在することを知り、デフォルトのindex.phpで置き換えを行ったら投稿記事が表示できた。
+(自分で作成したindex.php(phpinfoを表示)で上書いてしまっていたためrewriteの挙動は正しいが投稿内容が表示されなくなった。)
