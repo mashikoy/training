@@ -1,0 +1,242 @@
+ [2022/2/2]研修タスクまとめ2
+ 
+★追加でやること。
+
+1.rssフィードを見つけてwgetで取得する。(yahooニュースとかメディア系の記事　※)
+2.shellで加工してwpに表示
+
+本文記事のあるものがよい。(サンプル：[NHKニュース](https://www.nhk.or.jp/rss/news/cat0.xml))
+
+<https://www.nhk.or.jp/rss/news/cat0.xml>
+
+◆大枠
+ メディアサイトのコンテンツ表示
+ 
+◆処理概要
+1.記事情報を取得する。
+2.shellにて記事情報をcsv形式に変換する。
+  1)各ニュースの構造を確認し、要素ごとにわける。
+  2)itemの要素をカンマで区切り、itemごとに行を分ける。
+3.phpスクリプトにてcsvファイルを取り込み、itemごとに記事を公開する。
+  (dateはitemの日時を使用する。)
+
+◆csv概要
+title,link,pubDate,description
+title,link,pubDate,description
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+
+◆投稿概要
+件名：title(linkつける　※事後追記：つけられなかった)
+本文：description
+日時：pubDate
+
+※guid,nhknews:newは使用しない。
+
+
+◆実作業手順
+
+[admin@localhost auto_posting]$ sudo wget -O /var/www/training.com/wp-admin/auto_posting/new_rss.xml  https://www.nhk.or.jp/rss/news/cat0.xml
+
+→ファイル出力先を指定して、xmlファイルを取得。
+
+
+＜NGケース1 shellで頑張ろうとしたとき＞
+
+itemから上の行を削除
+
+一番下のitemから下の行を削除
+
+item数をカウント(xにいれる)
+ここまでできた-----------------------------------------------------
+
+item数分記事を要素ごとに分解
+
+＜分解の仕方？？＞
+
+sedコマンドで
+<item>(1回目に見つかったもの)～</item>(1回目に見つかったもの)
+<item>(X回目に見つかったもの)～</item>(x回目に見つかったもの)
+を配列にいれていく。
+
+それぞれの項目について、for文(item数回)で
+echo -n title, >>csv
+echo -n link, >>csv
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+echo -n nhknews:new >>csv
+
+のような形式でcsvにどんどんいれていく。
+
+＜NGケース1 ロジックが重くなりそうなので中断＞
+
+
+
+＜NGケース2 xmllintをしたとき＞
+
+xmllint --xpath '/item/title' new_rss.xml | tr ' ' '\n' | head
+
+・参考サイト(Xpathについて)：
+
+[xmllintでCLIでもXMLをパースする - Bye Bye Moore](https://shuzo-kino.hateblo.jp/entry/2015/03/27/230345)
+
+[クローラ作成に必須！XPATHの記法まとめ - Qiita](https://qiita.com/rllllho/items/cb1187cec0fb17fc650a)
+
+
+[admin@localhost auto_posting]$ xmllint --xpath "/rss/channel/item/pubDate" new_rss.xml
+～(省略)
+
+→値を取得できた例
+
+xmllint --xpath "/rss/channel/item/pubDate/text()" new_rss.xml
+～(省略)
+
+→/text()を指定するとvalueだけ取得できる
+
+[admin@localhost auto_posting]$ xmllint --xpath "/rss/channel/item/pubDate" new_rss.xml | sed "s|</pubDate>|\n|g"
+～(省略)
+
+[admin@localhost auto_posting]$ xmllint --xpath "/rss/channel/item/pubDate" new_rss.xml | sed "s|</pubDate>|\n|g" | sed "s|<pubDate>||g"
+～(省略)
+
+→時間だけを取得。
+
+・参考サイト()：
+[【Shell】XMLファイルから要素や属性を抽出する - マイナー・マイナー](https://minor.hatenablog.com/entry/2016/01/12/222513)
+
+[admin@localhost auto_posting]$ xmllint --xpath "/rss/channel/item/pubDate" new_rss.xml | sed "s|</pubDate>|\n|g" | sed "s|<pubDate>||g" | sudo xargs -I@ sh -c ' echo "@" >> test.txt '
+
+[admin@localhost auto_posting]$ less test.txt
+～(省略)
+
+→解析結果をファイルに出力
+
+
+[admin@localhost auto_posting]$ xmllint --encode utf-8 --xpath "/rss/channel/item/title" new_rss.xml | sed "s|</title>|\n|g" | sed "s|<title>||g"
+～(省略)
+
+[admin@localhost auto_posting]$ xmllint --encode utf-8 --xpath "/rss/channel/item/title" new_rss.xml | sed "s|</title>|\n|g" | sed "s|<title>||g" | nkf -g
+ASCII
+
+→titleは解析後ASCIIになってしまう。
+
+※xmllintにて--encode utf-8を指定してもエラーになるため、ここではencodeを行わずにphp側でutf-8encodeした結果をDBに投入するように処理する。
+
+補足：nkfコマンド -gオプションを指定すると使用している文字コードを解析する。(guessのg)
+
+＜NGケース2 csvへのいい出力方法が思いつかなかったので中断＞
+
+
+＜OKケース xslを使用する＞
+
+・参考サイト(xslについて)：
+[1. はじめに](https://www.saj.co.jp/techinfo/htmls/xml-libxslt-introduction.html#:~:text=xsltproc%E3%81%A8%E3%81%AFlibxslt%E3%82%92,%E3%81%AB%E4%BB%98%E5%B1%9E%E3%81%97%E3%81%A6%E3%81%84%E3%81%BE%E3%81%99%E3%80%82)
+
+・参考サイト(定義方法)：
+<https://atmarkit.itmedia.co.jp/fxml/tanpatsu/xslt/xslt04.html>)
+
+・xmlにXSL(xml用のstylesheet)を適用するライブラリ。XPathを使用することも可能。(template match
+
+・XMLの構造からcsvに変換するテンプレート関数を作成し、xsltprocコマンドにxmlファイルと一緒に引き渡す。
+
+[テンプレート内容]
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xsl:output method="text" encoding="utf-8" />
+
+  <xsl:param name="delim" select="','" />
+  <xsl:param name="break" select="''" />
+
+  <xsl:template match="/">
+    <xsl:apply-templates select="rss/channel/item" />
+  </xsl:template>
+
+  <xsl:template match="item">
+    <xsl:apply-templates />
+    <xsl:value-of select="$break" />
+      <xsl:text>
+</xsl:text>
+  </xsl:template>
+  ↑itemにmatchしたら改行する。
+
+  <xsl:template match="title|link|pubDate|description">
+    <xsl:value-of select="text()" />
+    <xsl:if test="following-sibling::*">
+      <xsl:value-of select="$delim" />
+    </xsl:if>
+  </xsl:template>
+  ↑取得したい項目を指定し、一致したらtext()を出力する。
+  また、同じ親項目(この場合はitem)を持つ要素がある場合はカンマで区切る。
+
+  <xsl:template match="text()" />
+</xsl:stylesheet>
+
+[admin@localhost auto_posting]$ xsltproc xml_to_csv.xsl new_rss.xml | awk '{print substr($0, 1, length($0)-1)}' | sudo xargs -I@ sh -c ' echo "@" >> kekka.txt '
+
+→xsltprocに定義ファイル(xml_to_csv.xsl)とxml本体を渡してカンマ区切りに変換する。
+ 最後の要素の後ろにもカンマがついているので、awkで整形する。
+ 結果を適当なファイルに出力
+
+[admin@localhost auto_posting]$ less -N kekka.txt
+
+    ～(省略)
+      
+→7記事文行が作成されており、かつカンマで区切られていることを確認。
+
+・参考サイト(コンテキストノードについて(text()とか))：
+[2. ロケーションパス \| TECHSCORE(テックスコア)](https://www.techscore.com/tech/XML/XPath/xpath02.html/)
+
+・上記内容をshellファイルで実装する。
+◆shell概要
+
+1)引数にwsl、xmlを指定する。
+2)ファイル名はresult.csv固定
+(同名のファイルが存在する場合はresult.csv_yyyymmddhhmmにリネームしてカレント/hisディレクトリに移動)
+
+-----------------------------------------------------------------------------------
+#!/bin/sh
+
+FileName=result.csv
+wsl=$1
+xml=$2
+
+if test -e "${FileName}"; then
+    mv $FileName "${FileName}_`date +%Y%m%d%H%M`"
+    find ./ -name 'result.csv_*' | xargs -I% sh -c " mv "%" ./his "
+fi
+
+xsltproc $wsl $xml | awk '{print substr($0, 1, length($0)-1)}' | xargs -I@ sh -c " echo "@" >> ${FileName} "
+
+-----------------------------------------------------------------------------------
+
+・参考サイト(shellを組む時に参考になったサイト)：
+[xargs – 標準入力と引数を組み合わせコマンドを実行する \| Linuxコマンド.NET](https://linuxcommand.net/xargs/#xargssh)
+
+・出力されたcsvファイルを記事データとしてwordpressに取り込むphpファイルを作成。
+-----------------------------------------------------------------------------------
+<?php
+require('../../wp-blog-header.php');
+$file = new SplFileObject('result.csv'); //csvファイルの読み込み
+$file->setFlags(SplFileObject::READ_CSV);
+foreach ($file as $line) {
+    $records[] = $line;
+}
+
+#var_dump(date("Y/m/d H:i:s",strtotime($records[0][3])));
+
+for ($i=0 ; $i<count($records);$i++){
+    $date = date("Y/m/d H:i:s",strtotime($records[$i][3]));
+    $post_value = array(
+        'post_title' => $records[$i][0], //post title
+        'post_content' => $records[$i][4], //post content
+        'post_status' => 'publish', //公開ステータス
+        'tags_input' => 'RSS', //tag
+        'post_date_gmt' => $date //date
+    );
+
+    wp_insert_post($post_value);
+
+}
+
+#echo "投稿一覧:https://training.com/wp-admin/edit.php"
+?>
+-----------------------------------------------------------------------------------
+
+→記事の取り込みを確認。
