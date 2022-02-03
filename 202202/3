@@ -1,0 +1,350 @@
+ [2022/2/3]研修タスクまとめ
+ 
+◆大枠
+ ・wp-cliにて記事の自動投稿を行う。
+ 
+◆実作業手順
+
+[admin@localhost src]$ sudo curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+
+→curlでwp-cli.pharをダウンロード
+
+[admin@localhost src]$ php wp-cli.phar --info
+
+→動作確認を実施(infoを表示)
+
+[admin@localhost src]$ ls -l wp-cli.phar
+-rw-r--r--. 1 root root 6494444  2月  2 18:56 wp-cli.phar
+[admin@localhost src]$ sudo chmod +x wp-cli.phar
+[admin@localhost src]$ ls -l wp-cli.phar
+-rwxr-xr-x. 1 root root 6494444  2月  2 18:56 wp-cli.phar
+[admin@localhost src]$ sudo mv wp-cli.phar /usr/local/bin/wp
+
+→実行権限を付与
+
+[admin@localhost src]$ wp --info
+
+→wpで実行できることを確認
+
+・参考サイト(wp-cliの導入について)：
+[Command line interface for WordPress \| WP-CLI](https://wp-cli.org/ja/)
+
+
+
+
+
+
+・自動投稿機能の実装で記事が大量に存在するため、wp-cliで削除を行う。
+
+　※削除対象⇒タグ：test,rssの記事
+
+＜参考：投稿に関連するテーブル＞
+1)wp_postmeta
+2)wp_posts
+3)wp_term_relationships
+
+★事前件数確認
+
+mysql> select count(*) from wp_postmeta;
++----------+
+| count(*) |
++----------+
+|     2140 |
++----------+
+1 row in set (0.07 sec)
+
+mysql> select count(*) from wp_posts;
++----------+
+| count(*) |
++----------+
+|     1074 |
++----------+
+1 row in set (0.15 sec)
+
+mysql> select count(*) from wp_term_relationships;
++----------+
+| count(*) |
++----------+
+|     2132 |
++----------+
+1 row in set (0.09 sec)
+
+⇒記事削除が関連するテーブルの行数を確認
+
+
+★☆★☆↓wp-cliで特定のタグの記事を削除しようとしたが、wp-cliではできなそうなので一括削除に変更★☆★☆
+mysql> select * from wp_terms;
++---------+-----------------+-----------------+------------+
+| term_id | name            | slug            | term_group |
++---------+-----------------+-----------------+------------+
+|       1 | 未分類          | uncategorized   |          0 |
+|       2 | twentytwentytwo | twentytwentytwo |          0 |
+|       3 | test            | test            |          0 |
+|       4 | RSS             | rss             |          0 |
++---------+-----------------+-----------------+------------+
+4 rows in set (0.01 sec)
+
+⇒testとrssのterm_idを確認(3,4を指定する)
+
+★実装方法
+wp post deleteにて削除が行えるが、記事の指定方法がpost_id、all、trash(ごみ箱)くらいしかなさそうなので
+term_idから削除対象の一覧を取得しwp post deleteに引き渡す。
+
+デフォルトのままではタグからの記事一覧取得ができなそうなので、以下プラグインを導入する。
+
+・List category posts
+[List category posts: カテゴリー・タグの記事一覧を表示できるWordPressプラグイン ｜ ねたわん](https://netaone.com/wp/list-category-posts/)
+
+[admin@localhost wp-admin]$ pwd
+/var/www/training.com/wp-admin
+
+[admin@localhost wp-admin]$ sudo mkdir downloads
+[admin@localhost wp-admin]$ sudo chown apache:apache downloads
+[admin@localhost wp-admin]$ cd downloads
+
+[admin@localhost downloads]$ sudo curl -LO https://downloads.wordpress.org/plugin/list-category-posts.0.86.1.zip
+[admin@localhost downloads]$ sudo wp plugin install ./list-category-posts.0.86.1.zip --allow-root
+
+⇒プラグインをインストール
+★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆
+
+[admin@localhost downloads]$ wp post delete $(wp post list --post_type='post' --format=ids)
+
+⇒投稿記事をすべてゴミ箱へ
+
+☆trash時のデータベースを確認
+
+mysql> select count(*) from wp_postmeta;
++----------+
+| count(*) |
++----------+
+|     5339 |
++----------+
+1 row in set (0.09 sec)
+
+⇒約2.5倍に増えている。
+  wordpressが内部的に使用しているメタデータでトラッシュ時の取り扱いに関するデータが増加した。
+  
+mysql> select * from wp_postmeta where meta_key not in ('_encloseme','_pingme') limit 100\G
+*************************** 100. row ***************************
+   meta_id: 12869
+   post_id: 5119
+  meta_key: _wp_desired_post_slug
+meta_value: test955
+100 rows in set (0.01 sec)
+
+⇒meta_key：_wp_desired_post_slugのレコードが作成されている。
+
+When you move a post to the trash, _wp_desired_post_slug holds the slug that was desired for that post (now in the trash); i.e., when you move a post to the trash, WordPress suffixes the old slug so that it becomes available again, but it remembers the slug that you desired, just in case you decide to move it out of the trash and restore it.
+
+・参考サイト：
+[plugins - What's the _wp_desired_post_slug value for? - WordPress Development Stack Exchange](https://wordpress.stackexchange.com/questions/284903/whats-the-wp-desired-post-slug-value-for)
+
+
+
+mysql> select count(*) from wp_posts;
++----------+
+| count(*) |
++----------+
+|     2140 |
++----------+
+1 row in set (0.07 sec)
+
+⇒約2倍に増えている。
+　※リビジョン用のデータが新規追加されていたため。
+ 　　戻したいときのために変更履歴を保存しておく特別な投稿タイプ
+
+＜サンプルデータ＞
+ *************************** 30. row ***************************
+                   ID: 5259
+          post_author: 0
+★           post_date: 2022-02-03 11:44:34
+        post_date_gmt: 2022-02-03 02:44:34
+         post_content: 東京都知事や運輸大臣などを務め、芥川賞作家としても知られる石原慎太郎氏が、1日、亡くなりました。89歳でした。石原氏のこれまでを映像とともにまとめました。（動画は5分15秒です。データ放送ではご覧になれません。）
+           post_title: 【動画】石原慎太郎氏 これまでの歩みは
+         post_excerpt:
+ ★         post_status: inherit
+       comment_status: closed
+          ping_status: closed
+        post_password:
+            post_name: 5180-revision-v1
+              to_ping:
+               pinged:
+        post_modified: 2022-02-03 11:44:34
+    post_modified_gmt: 2022-02-03 02:44:34
+post_content_filtered:
+          post_parent: 5180
+                 guid: https://training.com/?p=5259
+           menu_order: 0
+ ★           post_type: revision
+       post_mime_type:
+        comment_count: 0
+30 rows in set (0.01 sec)
+ 
+ 
+ 
+mysql> select count(*) from wp_term_relationships;
++----------+
+| count(*) |
++----------+
+|     2132 |
++----------+
+1 row in set (0.06 sec)
+
+⇒変動なし
+
+
+[admin@localhost downloads]$ wp post delete $(wp post list --post_status=trash --format=ids)
+
+⇒トラッシュした記事を完全削除
+
+
+☆完全削除時のデータベースを確認
+
+mysql> select count(*) from wp_posts;
++----------+
+| count(*) |
++----------+
+|        8 |
++----------+
+1 row in set (0.09 sec)
+
+mysql> select count(*) from wp_posts;
++----------+
+| count(*) |
++----------+
+|        8 |
++----------+
+1 row in set (0.08 sec)
+
+mysql> select count(*) from wp_term_relationships;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+1 row in set (0.08 sec)
+mysql> select * from wp_term_relationships\G
+*************************** 1. row ***************************
+       object_id: 5
+term_taxonomy_id: 2
+      term_order: 0
+1 row in set (0.00 sec)
+
+⇒データベース上からもデータが消えたことを確認。
+
+
+・wpコマンド(wp post create)でデータの投稿を実施。
+
+＜wp post createコマンドサンプル＞
+wp post create --post_type=page --post_status=publish --post_title='A future post' --post-status=future --post_date='2020-12-01 07:00:00'
+
+・参考サイト(コマンドのサンプルのあったページ)：
+[wp-cli – admin note](https://admnote.paix.jp/2014/06/wp-cli/)
+
+・参考サイト(wp_post_create)
+[wp post create \| WP-CLI Command | WordPress Developer Resources](https://developer.wordpress.org/cli/commands/post/create/)
+
+⇒各行でカンマをもとに要素を区切ってxargsに引き渡してwpコマンドを実行する。
+
+・やりたいこと
+csvファイルを1行ずつ読み込み、csvで要素を区切る | xarg ～ wp post create --post_type=page --post_status=publish --post_title=AAA --post_date=BBB --post_content=CCC
+
+・参考サイト(コマンド一覧)：
+[WP-CLI Commands \| WordPress Developer Resources](https://developer.wordpress.org/cli/commands/)
+
+
+[admin@localhost auto_posting]$ sudo vim processing_rss.sh
+
+#!/bin/sh
+
+FileName=result.csv
+wsl=$1
+xml=$2
+
+if test -e "${FileName}"; then
+    mv $FileName "${FileName}_`date +%Y%m%d%H%M`"
+    find ./  -maxdepth 1 -name 'result.csv_*' | xargs -I% sh -c " mv "%" ./his "
+fi
+
+#csv形式に整形してファイルに出力する。
+xsltproc $wsl $xml | awk '{print substr($0, 1, length($0)-1)}' | xargs -I@ sh -c " echo "@" >> ${FileName} "
+
+input例)aaaa,  bbbb, cccc, dddd
+★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆
+cat $FileName | awk 'BEGIN { FPAT="([^,]*); OFS = "\t" }'| awk 'BEGIN {  FS="\t";OFS = "," }
+#カンマごとにフィールドをつくる。(区切りはタブ)
+ (出力が終わったらカンマにする。)
+{
+  for (i=1; i<=NF; i++) {
+    printf "\"%s\"", $i;
+    if( i < NF ) printf "%s",OFS
+  }
+  #NF(要素数)分だけ処理を実施。
+  #処理は、"(ダブルクォーテ)出力⇒iが要素数より小さかったら要素だす⇒区切りはカンマ
+  printf "\n"
+} ' | cut -d ',' -f 1,3,4 --output-delimiter=" "
+★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆
+
+⇒★☆★☆★☆で囲った箇所を追加。
+  CSVの各要素について、ダブルクォーテーションで囲むようにし、
+  wp post createに引き渡すためにカンマからスペースに変更(最終行)
+  (処理が冗長化しているように見えるが、スペース区切りのある記事データをダブルクォーテーションで囲むロジックを作成するのに一度カンマにすると組みやすいのでいったんリファクタリングは考えない。)
+
+[admin@localhost auto_posting]$ sudo ./processing_rss.sh xml_to_csv.xsl new_rss.xml | xargs -n 3 sh -c ' sudo echo "wp post create wp post create --post_type=page --post_status=publish --post_title = ${0} --post_date={$1} post_content = ${2}" >> wp_post_create.txt'
+
+⇒shellを実行し、ダブルクォーテーションで囲まれかつスペース区切りになっている記事データを出力する。
+ 記事データをパイプでxargsに引き渡し、wp post createコマンドを実行
+
+[admin@localhost auto_posting]$ sudo ./processing_rss.sh xml_to_csv.xsl new_rss.xml | xargs -n 3 sh -c 'wp post create wp post create --post_type=page --post_status=publish --post_title=$0 post_content=$2'
+Error: Too many positional arguments: post create 新型コロナ 病床使用率50％超 重症患者用は5.5％ post_content=東京都内の新型コロナの患者用の病床使用率は、1日時点で50.7％になり、都が緊急事態宣言の発出の要請を検討す るとしていた50％を超えました。
+
+⇒「wp post create」は引数を受け取れない仕様になっているようなので、直接のキックはやめる。echoでwp post createコマンドを出力し、それをキックするつくりにする。
+
+
+[admin@localhost auto_posting]$ sudo ./processing_rss.sh xml_to_csv.xsl new_rss.xml | sudo xargs -n 3 sh -c ' sudo echo "wp post create --post_type=page --post_status=publish --post_title=${0} --post_date=${1} --post_content=${2}  --allow-root " >> wp_post_create.txt '
+
+⇒wp postを行うコマンドをファイル出力。
+
+[admin@localhost auto_posting]$ less wp_post_create.txt
+↓出力されたコマンドサンプル
+
+wp post create --post_type=page --post_status=publish --post_title=東京都 新型コロナ 病床使用率50％超 重症患者用は5.5％ --post_date= 01 Feb 2022 16:54:29 +0900 --post_content=東京都内の新型コロナの患者用の病床使用率は、1日時点で50.7％になり、都が緊急事態宣言の発出の要請を検討するとしていた50％を超えました。  --allow-root
+
+★課題
+1)記事でデータについてダブルクォーテーションで囲まれていないため、確認を行う。
+2)日付フォーマットを整形する必要がある。
+
+★対応
+1)~~xargsに-0をつけたらダブルクォーテーションが維持された。
+[admin@localhost auto_posting]$ sudo ./processing_rss.sh xml_to_csv.xsl new_rss.xml | sudo xargs -n 3 -0 sh -c ' sudo echo "wp post create --post_type=page --post_status=publish --post_title=${0} --post_date=${1}
+--post_content=${2}  --allow-root " >> wp_post_create.txt '
+　
+
+補足：xargs -0の挙動について)
+xargs の -0 オプションは区切り文字をNULL文字 ( \0 ) に変更する。
+そのため文章中のスペースが引数扱いされずに済む。
+
+[findとxargsを使うときのfind -print0とxargs -0 - Ola Kae Tode Tai](https://ola.kironono.com/entry/2017/02/01/080000)~
+
+2)以下の通りUNIX TIMESTAMPに変換して投入してみる。
+ `date +%s --date "${1}"`
+⇒別途検討
+
+★コマンド
+
+・＜うまくいくパターン＞1回wpコマンドをテキストに出力して実行
+sudo ./processing_rss.sh xml_to_csv.xsl new_rss.xml | sudo xargs -n 3 sh -c ' sudo echo "wp post create --post_type=post --post_status=publish --post_title=\"${0}\" --post_date=`date +%s --date "${1}"` --post_content=\"${2}\"  --allow-root " >> wp_post_create.txt ' && sudo chmod 755 wp_post_create.txt && sudo ./wp_post_create.txt
+
+・＜うまくいかないパターン＞直接wpコマンドを実行するパターン
+sudo ./processing_rss.sh xml_to_csv.xsl new_rss.xml | sudo xargs -n 3 sh -c ' sudo wp post create --post_type=post --post_status=publish --post_title=\"${0}\" --post_date=`date +%s --date "${1}"` --post_content=\"${2}\"  --allow-root '
+
+※引数に実行shell名などがはいってしまう
+
+・＜うまくいきそうなパターン＞
+$argvを使用して実行する。
+コマンドラインから実行したときに、 現在のスクリプトに渡されたすべての引数の配列が含まれるため
+こちらを使用して実行してみる。
+
+・参考サイト($argvについて)：
+[PHP: $argv - Manual](https://www.php.net/manual/ja/reserved.variables.argv.php)
