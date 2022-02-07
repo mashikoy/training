@@ -1,0 +1,550 @@
+ [2022/2/7]研修タスクまとめ
+ 
+◆大枠
+ 1)負荷試験の実施(キャッシュを使用しない)
+ 2)varnishの導入
+ 3)負荷試験の実施(キャッシュを使用　by varnish)
+ 
+◆実作業手順
+
+◆復習：topコマンド見方(参考サイト)
+[TOPコマンドを使いこなしてTOPを狙う。 - コンピュータクワガタ](https://kuwalab.hatenablog.jp/entry/20110124/p1)
+
+[topコマンドの VIRT、RES、SHR などの意味。 - #wakatta](https://wakatta.xyz/i41/)
+
+[Linuxのtop コマンドの見方 ~メモリやload averageの単位,定義,目安~ \| SEの道標](https://milestone-of-se.nesuke.com/sv-basic/linux-basic/top-command/)
+
+★負荷試験定義
+
+・キャッシュテストとして、以下を想定して実施。
+ concurrent：x
+ 
+
+⇒x人が同時にテストを行う。
+人数を増やしていき、＜想定結果＞の通りとなるかを確認
+(人数：max255人　※apacheのMaxClientsデフォルト値)
+
+＜想定結果＞
+tps：Varnish導入後 > Varnish導入前
+
+　※503エラー：アクセス過多
+
+※★が見るべきポイント(値はサンプル)
+★Transactions:                    807 hits
+★Availability:                 100.00 %
+Elapsed time:                 179.40 secs
+★Data transferred:              18.22 MB
+★Response time:                  1.10 secs
+★Transaction rate:               4.50 trans/sec
+★Throughput:                     0.10 MB/sec
+Concurrency:                    4.96
+★Successful transactions:         807
+★Failed transactions:               0
+★Longest transaction:            6.16
+★Shortest transaction:           0.00
+
+
+
+・テストバリエーション
+
+1.キャッシュが使用される場合
+ 1)concurrent=5 --time=3M <URLリストから5種類にアクセス>　※(1)5人同時・(2)3分間アクセス・(3)5種類のページ にアクセスを行う。
+ 2)concurrent=50 --time=3M <URLリストから5種類にアクセス>　※(1)50人同時・(2)3分間アクセス・(3)5種類のページ にアクセスを行う。
+ 3)concurrent=100 --time=3M <URLリストから5種類にアクセス>　※(1)100人同時・(2)3分間アクセス・(3)5種類のページ にアクセスを行う。
+ 4)concurrent=150 --time=3M <URLリストから5種類にアクセス>　※(1)150人同時・(2)3分間アクセス・(3)5種類のページ にアクセスを行う。
+ ~~5)concurrent=200 --time=3M <URLリストから5種類にアクセス>　※(1)200人同時・(2)3分間アクセス・(3)5種類のページ にアクセスを行う。
+ 6)concurrent=255 --time=3M <URLリストから5種類にアクセス>　※(1)255人同時・(2)3分間アクセス・(3)5種類のページ にアクセスを行う。
+ 7)concurrent=255 --time=10M <URLリストから5種類にアクセス>　※(1)255人同時・(2)3分間アクセス・(3)5種類のページ にアクセスを行う。
+
+2.キャッシュが使用される場合(あまり変わらないことを確認する。)
+ 1)concurrent=5 --time=3M <URLリストからランダムにアクセス>　※(1)5人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+ 2)concurrent=50 --time=3M <URLリストからランダムにアクセス>　※(1)50人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+ 3)concurrent=100 --time=3M <URLリストからランダムにアクセス>　※(1)100人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+ 4)concurrent=150 --time=3M <URLリストからランダムにアクセス>　※(1)150人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+ ~~5)concurrent=200 --time=3M <URLリストからランダムにアクセス>　※(1)200人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+ 6)concurrent=255 --time=3M <URLリストからランダムにアクセス>　※(1)255人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+ 7)concurrent=255 --time=10M <URLリストからランダムにアクセス>　※(1)255人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+ 
+ ＜事後追記＞
+同時実行数150以降はプロセス数が多すぎて全然さばけなかったので、同時実行数は150までを対象にテストを実施。
+
+
+・実行コマンド
+
+※コマンド制約(URL5種類の選定について)
+・siegeコマンドにURLリストファイルを渡した時の読み込み方法は以下2パターン
+  a.シーケンシャル読み込み
+  b.ランダム読み込み
+
+ランダム読み込み時に行数の指定はなかったため、以下のように実装。
+
+shufコマンド(-n 5)にてurlリストから5種類選定する。
+
+sudo siege ～～～～～ `sudo shuf -n 5 urls.txt > urls_shuf.txt`
+のような形式で実装すると2行目以降のURL(?)にて複数URLを1URLとみなされるため、
+--fileにshuf結果を指定して実行を行う。
+
+各コマンド間でsudo systemctl retart httpdを実行
+
+
+1.キャッシュが使用される場合
+
+ 1)sudo siege --benchmark --concurrent=5 --time=3M --file="`sudo shuf -n 5 urls.txt > urls_shuf.txt && echo "urls_shuf.txt"`"  --internet --log=./logs/siege1-1.log --mark="text"
+
+ 2)sudo siege --benchmark --concurrent=50 --time=3M --file="`sudo shuf -n 5 urls.txt > urls_shuf.txt && echo "urls_shuf.txt"`" --internet --log=./logs/siege1-2.log --mark="text"
+
+ 3)sudo siege --benchmark --concurrent=100 --time=3M --file="`sudo shuf -n 5 urls.txt > urls_shuf.txt && echo "urls_shuf.txt"`" --internet --log=./logs/siege1-3.log --mark="text"
+
+ 4)sudo siege --benchmark --concurrent=150 --time=3M --file="`sudo shuf -n 5 urls.txt > urls_shuf.txt && echo "urls_shuf.txt"`" --internet --log=./logs/siege1-4.log --mark="text"
+
+~~5)sudo siege --benchmark --concurrent=200 --time=3M --file="`sudo shuf -n 5 urls.txt > urls_shuf.txt && echo "urls_shuf.txt"`" --internet --log=./logs/siege1-5.log --mark="text"
+
+ ~~6)sudo siege --benchmark --concurrent=255 --time=3M --file="`sudo shuf -n 5 urls.txt > urls_shuf.txt && echo "urls_shuf.txt"`" --internet --log=./logs/siege1-6.log --mark="text"
+
+~~7)sudo siege --benchmark --concurrent=255 --time=10M --file="`sudo shuf -n 5 urls.txt > urls_shuf.txt && echo "urls_shuf.txt"`" --internet --log=./logs/siege1-7.log --mark="text"
+
+
+2.キャッシュが使用される場合(あまり変わらないことを確認する。)
+
+ 1)sudo siege --benchmark --concurrent=5 --time=3M --file=urls.txt --internet --log=./logs/siege2-1.log --mark="text"
+
+ 2)sudo siege --benchmark --concurrent=50 --time=3M --file=urls.txt --internet --log=./logs/siege2-2.log --mark="text"
+
+ 3)sudo siege --benchmark --concurrent=100 --time=3M --file=urls.txt --internet --log=./logs/siege2-3.log --mark="text"
+
+ 4)sudo siege --benchmark --concurrent=150 --time=3M --file=urls.txt --internet --log=./logs/siege2-4.log --mark="text"
+
+ ~~5)sudo siege --benchmark --concurrent=200 --time=3M --file=urls.txt --internet --log=./logs/siege2-5.log --mark="text"
+
+ ~~6)sudo siege --benchmark --concurrent=255 --time=3M --urls.txt --internet --log=./logs/siege2-6.log --mark="text"
+
+ ~~7)sudo siege --benchmark --concurrent=255 --time=10M --file=urls.txt --internet --log=./logs/siege2-7.log --mark="text"
+
+
+＜実行結果＞
+
+1.キャッシュが使用される場合
+
+ 1)(1)5人同時・(2)3分間アクセス・(3)5種類のページ にアクセス
+Lifting the server siege...
+Transactions:                    807 hits
+Availability:                 100.00 %
+Elapsed time:                 179.40 secs
+Data transferred:              18.22 MB
+Response time:                  1.10 secs
+Transaction rate:               4.50 trans/sec
+Throughput:                     0.10 MB/sec
+Concurrency:                    4.96
+Successful transactions:         807
+Failed transactions:               0
+Longest transaction:            6.16
+Shortest transaction:           0.00
+
+ 2)(1)50人同時・(2)3分間アクセス・(3)5種類のページ にアクセス
+Lifting the server siege...
+Transactions:                    632 hits
+Availability:                 100.00 %
+Elapsed time:                 179.61 secs
+Data transferred:              14.68 MB
+Response time:                 11.61 secs
+Transaction rate:               3.52 trans/sec
+Throughput:                     0.08 MB/sec
+Concurrency:                   40.84
+Successful transactions:         632
+Failed transactions:               0
+Longest transaction:           56.80
+Shortest transaction:           0.00
+
+ 3)(1)100人同時・(2)3分間アクセス・(3)5種類のページ にアクセス
+Lifting the server siege...
+Transactions:                    428 hits
+Availability:                 100.00 %
+Elapsed time:                 195.16 secs
+Data transferred:              10.62 MB
+Response time:                 27.35 secs
+Transaction rate:               2.19 trans/sec
+Throughput:                     0.05 MB/sec
+Concurrency:                   59.99
+Successful transactions:         428
+Failed transactions:               0
+Longest transaction:          121.44
+Shortest transaction:           0.00
+
+ 4)(1)150人同時・(2)3分間アクセス・(3)5種類のページ にアクセスを行う。
+Transactions:                      4 hits
+Availability:                 100.00 %
+Elapsed time:                 311.55 secs
+Data transferred:               0.17 MB
+Response time:                 81.23 secs
+Transaction rate:               0.01 trans/sec
+Throughput:                     0.00 MB/sec
+Concurrency:                    1.04
+Successful transactions:           5
+Failed transactions:               0
+Longest transaction:          269.44
+Shortest transaction:           0.00
+
+※全然さばけていないため、同時実行数の増加はここまで
+
+
+
+2.キャッシュが使用される場合(あまり変わらないことを確認する。)
+
+ 1)(1)5人同時・(2)3分間アクセス・(3)ランダム にアクセス
+Lifting the server siege...
+Transactions:                    768 hits
+Availability:                 100.00 %
+Elapsed time:                 179.66 secs
+Data transferred:              17.59 MB
+Response time:                  1.16 secs
+Transaction rate:               4.27 trans/sec
+Throughput:                     0.10 MB/sec
+Concurrency:                    4.95
+Successful transactions:         768
+Failed transactions:               0
+Longest transaction:            5.75
+Shortest transaction:           0.00
+
+ 2)(1)50人同時・(2)3分間アクセス・(3)ランダム にアクセス
+Lifting the server siege...
+Transactions:                    632 hits
+Availability:                 100.00 %
+Elapsed time:                 179.64 secs
+Data transferred:              14.66 MB
+Response time:                 11.92 secs
+Transaction rate:               3.52 trans/sec
+Throughput:                     0.08 MB/sec
+Concurrency:                   41.93
+Successful transactions:         632
+Failed transactions:               0
+Longest transaction:           55.39
+Shortest transaction:           0.00
+
+ 3)(1)100人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+ Lifting the server siege...
+Transactions:                    424 hits
+Availability:                 100.00 %
+Elapsed time:                 179.77 secs
+Data transferred:              10.04 MB
+Response time:                 33.59 secs
+Transaction rate:               2.36 trans/sec
+Throughput:                     0.06 MB/sec
+Concurrency:                   79.23
+Successful transactions:         424
+Failed transactions:               0
+Longest transaction:          177.64
+Shortest transaction:           0.01
+
+ 4)(1)150人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+ Lifting the server siege...
+Transactions:                      0 hits
+Availability:                   0.00 %
+Elapsed time:                 251.42 secs
+Data transferred:               0.00 MB
+Response time:                  0.00 secs
+Transaction rate:               0.00 trans/sec
+Throughput:                     0.00 MB/sec
+Concurrency:                    0.00
+Successful transactions:           0
+Failed transactions:               0
+Longest transaction:            0.00
+Shortest transaction:           0.00
+
+
+・varnishを導入(vhostをいじるので一応バックアップ取得)
+
+・参考サイト(varnishについて)：
+[用語検索 - ZDNet Japan](https://japan.zdnet.com/glossary/exp/Web%E3%82%A2%E3%82%AF%E3%82%BB%E3%83%A9%E3%83%AC%E3%83%BC%E3%82%BF/?s=4)
+
+・参考サイト(varnish導入)：
+[How to speed up Apache with Varnish HTTP cache on Ubuntu 18.04 LTS](https://www.howtoforge.com/how-to-install-and-configure-varnish-with-apache-on-ubuntu-1804/)
+
+[Apache SSL Termination (HTTPS Varnish cache) \| by Sergii Ivashchenko | Medium](https://medium.com/@sivaschenko/apache-ssl-termination-https-varnish-cache-3940840531ad)
+
+★varnishは直接SSL通信を復号することができないため、443ポートで待ち受けを行い
+  それを80ポート(Varnish)にフォワーリングすることによってhttps通信を行う。
+
+＜Varnish導入後イメージ図＞
+
+   http    (80ポート)          (8080ポート)
+C→→→→→→→→→Varnish→→→→→→→→→非SSL vhost→→→→→→→→→wordpressコンテンツ
+             ↑
+             ↑
+   https     ↑
+C→→→→→→→→→SSL Vhost
+          (443ポート)
+
+
+
+＜現在の設定＞
+
+   http    (8080ポート)
+C→→→→→→→→→非SSL vhost
+             ↓
+             ↓リダイレクト
+   https     ↓
+C→→→→→→→→→SSL Vhost→→→→→→→→→wordpressコンテンツ
+          (443ポート)
+          
+
+＜詳細＞
+
+1.HTTP(80)アクセスはvarnishで待ち受けする。
+
+2.https(443)アクセスはSSL設定をしている443ポートで待ち受けを行う。
+  通信を復号し、Varnishにフォワーリングを行う。
+
+3.http or httpsアクセスがvarnishにいき、そこから処理を行う。
+   ＜最新のキャッシュあり＞ページをすぐに返す。
+   ＜最新のキャッシュなし＞コンテンツにアクセスし、ページをキャッシュ。レスポンスを返す。
+
+[admin@localhost src]$ sudo yum install varnish.x86_64
+[admin@localhost src]$ sudo systemctl status varnish
+● varnish.service - Varnish Cache, a high-performance HTTP accelerator
+   Loaded: loaded (/usr/lib/systemd/system/varnish.service; disabled; vendor preset: disabled)
+   Active: inactive (dead)
+→Varnishをインストール(まだ起動はしない。)
+
+
+[admin@localhost varnish]$ sudo sed -i "s|.host = \"127.0.0.1\";|.host = \"192.168.56.111\";|" /etc/varnish/default.vcl
+[admin@localhost varnish]$ less /etc/varnish/default.vcl
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+backend default {
+    .host = "192.168.56.111";
+    .port = "8080";
+}
+
+→varnishから接続するバックエンドポートを8080ポートに変更。
+
+
+[admin@localhost varnish]$ sudo sed -i "s|VARNISH_LISTEN_PORT=6081|VARNISH_LISTEN_PORT=80|" /etc/varnish/varnish.params
+[admin@localhost varnish]$ less /etc/varnish/varnish.params
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+VARNISH_LISTEN_PORT=80
+
+→VarnishのListenポートを80に変更。
+
+[admin@localhost extra]$ sudo cp httpd-vhosts.conf httpd-vhosts.conf_bak
+
+→修正前にバックアップ取得。
+
+[admin@localhost extra]$ less httpd-vhosts.conf
+
+★before
+<VirtualHost *:8080>
+    RewriteEngine on
+    RewriteCond %{HTTPS} off
+    RewriteRule ^/(.*)$ https://training.com/$1 [R=301,L]
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+    #ssl setting
+    SSLEngine on
+    SSLProtocol +TLSv1.2
+    SSLCertificateFile /usr/local/apache2/.ssl/server.crt
+    SSLCertificateKeyFile /usr/local/apache2/.ssl/server.key
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride All
+       Require all granted
+
+    #Basic Authentication config
+
+       #AuthType Basic
+       #AuthName "Basic Authentication"
+       #AuthUserFile /usr/local/apache2/conf/.htpasswd
+       #require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+
+★after
+<VirtualHost *:8080>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride All
+       Require all granted
+       #Basic Authentication config
+
+          #AuthType Basic
+          #AuthName "Basic Authentication"
+          #AuthUserFile /usr/local/apache2/conf/.htpasswd
+          #require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerAdmin webmaster@training.com
+    ServerName training.com
+
+    #ssl setting
+    SSLEngine on
+    SSLProtocol +TLSv1.2
+    SSLCertificateFile /usr/local/apache2/.ssl/server.crt
+    SSLCertificateKeyFile /usr/local/apache2/.ssl/server.key
+
+    #to_Varnish
+    ProxyPreserveHost On
+    ProxyPass / http://192.168.56.111:80/
+    ProxyPassReverse / http://192.168.56.111:80/
+
+</VirtualHost>
+ 
+ 
+→★beforeにおける8080ポートはHTTPSにリダイレクトするように設定しているところ、
+ 8080ポートはコンテンツへのアクセス用にし、443ポートは復号後Varnish(80ポート)に接続を向けるように修正する。
+ (8080ポートへのアクセスはVarnishから行う。)
+ ProxyPassReverseの設定を行うことにより、サーバにて301コードを返してリダイレクトを行う際もリバプロを介するようになる。
+ 
+ ・参考サイト(リバプロ設定)：
+ [Apacheのリバースプロキシでホストヘッダーを書換えない方法 \| puti se blog](https://blog.putise.com/apache%E3%81%AE%E3%83%AA%E3%83%90%E3%83%BC%E3%82%B9%E3%83%97%E3%83%AD%E3%82%AD%E3%82%B7%E3%81%A7%E3%83%9B%E3%82%B9%E3%83%88%E3%83%98%E3%83%83%E3%83%80%E3%83%BC%E3%82%92%E6%9B%B8%E6%8F%9B%E3%81%88/#ProxyPassProxyPassReverse)
+ 
+ 
+ 
+ [admin@localhost extra]$ httpd -t
+AH00526: Syntax error on line 76 of /usr/local/apache2/conf/extra/httpd-vhosts.conf:
+Invalid command 'ProxyPreserveHost', perhaps misspelled or defined by a module not included in the server configuration
+
+[admin@localhost conf]$ sudo sed -i "s|#LoadModule proxy_http_module modules/mod_proxy_http.so|LoadModule proxy_http_module modules/mod_proxy_http.so|" /usr/local/apache2/conf/httpd.conf
+
+[admin@localhost conf]$ sudo sed -i "s|#LoadModule proxy_module modules/mod_proxy.so|LoadModule proxy_module modules/mod_proxy.so|" /usr/local/apache2/conf/httpd.conf
+
+[admin@localhost conf]$ httpd -t
+Syntax OK
+
+→構文エラー
+未定義っぽいので、proxy関連のモジュールをインクルードしたら構文エラー解消
+
+[admin@localhost extra]$ sudo systemctl restart httpd
+→問題なし
+
+[admin@localhost extra]$ sudo systemctl start varnish
+
+→エラー
+
+-- Unit varnish.service has begun starting up.
+ 2月 07 14:42:44 localhost.localdomain varnishd[11872]: bind(): Address already in use
+ 2月 07 14:42:44 localhost.localdomain varnishd[11872]: bind(): Address already in use
+ 2月 07 14:42:44 localhost.localdomain varnishd[11872]: Error: Failed to open (any) accept sockets.
+ 2月 07 14:42:44 localhost.localdomain systemd[1]: varnish.service: control process exited, code=exited status=2
+ 2月 07 14:42:44 localhost.localdomain polkitd[662]: Unregistered Authentication Agent for unix-process:11866:1514810 (system bus name :1.350, object path /o
+ 2月 07 14:42:44 localhost.localdomain systemd[1]: Failed to start Varnish Cache, a high-performance HTTP accelerator.
+-- Subject: Unit varnish.service has failed
+
+→静的コンテンツ用の設定が残っており、既使用である旨エラーが出る。
+
+※現時点でhttps://training.comにアクセスしたら、静的コンテンツが表示された。
+
+apacheでも80portをlistenしており重複しているものと思われるため、
+apacheのconfigファイルからListen 80を削除(コメントする。)
+
+[admin@localhost conf]$ sudo sed -i "s|Listen 80$|#Listen 80$|" /usr/local/apache2/conf/httpd.conf
+
+[admin@localhost conf]$ sudo systemctl restart httpd
+[admin@localhost conf]$ sudo systemctl restart varnish
+
+→両方稼働したことを確認。
+
+→ブラウザアクセス時、ずっとぐるぐるしている。
+
+以下スクリプトを実行し、mysqlにアクセスできないことを確認。
+
+[admin@localhost training.com]$ php check_db_connectin.php
+
+
+[admin@localhost training.com]$ strace php check_db_connectin.php
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+getsockopt(3, SOL_SOCKET, SO_ERROR, [111], [4]) = 0
+
+→socketが使用できていない可能性あり 
+TCP接続を使用したアクセスに変更を行う。
+
+mysql> rename user wp_usr@'localhost' to wp_usr@'127.0.0.1'
+    -> ;
+Query OK, 0 rows affected (0.02 sec)
+
+[admin@localhost training.com]$ php check_db_connectin.php
+
+データベースの接続に成功しました。
+
+
+＜check_db_connectin.phpソース＞
+
+<?php
+
+#$link = mysqli_connect('localhost:/tmp/mysql.sock', 'wp_usr', 'wp_1234', 'wordpress');
+★$link = mysqli_connect('127.0.0.1', 'wp_usr', 'wp_1234', 'wordpress');
+
+// 接続状況をチェックします
+if (mysqli_connect_errno()) {
+    die("データベースに接続できません:" . mysqli_connect_error() . "\n");
+} else {
+    echo "データベースの接続に成功しました。\n";
+}
+
+→★の箇所を修正
+
+[admin@localhost training.com]$ sudo sed -i "s|define( 'DB_HOST', 'localhost' );|define( 'DB_HOST', '127.0.0.1' );|" /var/www/training.com/wp-config.php
+
+→configファイルのDB_HOSTをIPに修正
+
+→まだログイン画面が表示されない、、
+
+＜現時点の確認済み事項＞
+1.training.comにアクセスできる。
+2.443ポート→80→ポート→8080ポートの通り接続されている。
+  (vhost8080にて定義したDocumentRootやログ出力場所が参照されているため。)
+3.ブラウザアクセスにてphpスクリプトが実行される。また上記作業によりDBアクセスができる。
+
+＜原因＞
+wp-confの設定漏れ(?)
+リダイレクトにかかわる他設定ミス
+
+・参考サイト：
+[FAQ/インストール – サポートフォーラム – WordPress.org 日本語](https://ja.wordpress.org/support/article/faq-installation/)
+[リバースプロキシの設定方法（NginxとApacheでの設定手順）](https://kinsta.com/jp/blog/reverse-proxy/#apache)
+
+
+
+・リバプロ関係の設定について見直し
+
+[admin@localhost extra]$ less httpd-vhosts.conf
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+ProxyPreserveHost On
+ProxyPass / http://192.168.56.111:80/
+ProxyPassReverse / http://192.168.56.111:80/
+
+ProxyPreserveHost：Off推奨かつ今回onにする必要がないためOffにする。
+※onにすると、、、バックエンドにホスト名を渡し、バックエンドから帰ってくるリダイレクト先URLとして使用される。
+　→設定したProxyPassとパターンマッチしないなどが生じる可能性がある。
+
+ProxyPassとProxyPassReverse：そのまま。
+
+・参考サイト：
+[【apache】 ProxyPreserveHost を On にするとはまる（こともある） at softelメモ](https://www.softel.co.jp/blogs/tech/archives/5465)
+
+[ReverseProxyでredirect時にhttp<->httpsが変わってしまう問題 - らるるの自宅と職場を往復する人生＠それをすてるなんてとんでもない！](https://www.rarul.com/mt/log/2015/05/reverseproxyred.html)
+
+↑今日はここまで----------------------------------------------------------------------------------------------------
