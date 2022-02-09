@@ -1,0 +1,448 @@
+ [2022/2/8]研修タスクまとめ
+ 
+◆大枠
+ 1)varnishの導入(続き)
+ 2)負荷試験の実施(キャッシュを使用　by varnish)
+ 3)varnishの設定追加(GETリクエストのみキャッシュ+ログイン画面はキャッシュしないように設定)
+
+
+◆作業準備：キャッシュ有効・無効用コマンド
+
+　●有効化
+sudo sed -i "s|Header add \"Cache-Control\" \"no-store\"|#Header add \"Cache-Control\" \"no-store\"|" /var/www/training.com/.htaccess
+
+　●無効化
+sudo sed -i "s|#Header add \"Cache-Control\" \"no-store\"|Header add \"Cache-Control\" \"no-store\"|" /var/www/training.com/.htaccess
+
+
+◆個人メモ
+
+作業中の実行コマンドについて、以下の通り記載方法を変更
+
+★☆★☆★☆★☆★☆★☆★☆★☆今まで★☆★☆★☆★☆★☆★☆★☆★☆
+
+実行コマンド
+→何をしたか、また結果どうなったか。(エラーor正常など)
+
+★☆★☆★☆★☆★☆★☆★☆★☆今後★☆★☆★☆★☆★☆★☆★☆★☆
+
+＜何をするか。＞
+
+実行コマンド
+
+→結果どうなったか　※書くことがない場合は省略するかも、、、
+
+★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆
+
+◆実作業手順
+
+ 1)varnishの導入(続き)
+
+＜現状のリダイレクトの挙動確認をするため、ブラウザアクセス＞
+
+→以下の通りとなることを確認
+
+[ProxyPreserveHost On]の時：https://training.com/wp-login.php?redirect_to=https%3A%2F%2Ftraining.com%2Fwp-admin%2Findex.php&reauth=1へのリダイレクトが循環してエラーになる。(ERR_TOO_MANY_REDIRECTS)
+
+[ProxyPreserveHost Off]の時：https://training.com/wp-admin/にリダイレクトされる。
+
+・onにすると、、、バックエンドにホスト名を渡し、バックエンドから帰ってくるリダイレクト先URLとして使用される。
+onは非推奨のためoff(デフォルト)で設定していたが、wordpressではonで設定したほうがよさそう(※1)なのでonにする。
+
+　※1 wordpressのスクリプトには、HTTP_HOSTを使用してURLを生成しているスクリプトがある。
+      mod_proxy公式には、
+      「ほとんどの場合、これは大量の名前ベースのバーチャルホスティングを行なっていて、 元々の Host ヘッダをバックエンドサーバが解釈する必要のあるときのような、 特別な設定が必要な場合にのみ有用です。」
+      と記載がある。
+      ただし今回は、wordpressのスクリプトがリクエストヘッダに含まれるHOSTを使用するため、バックエンドに書き換えられないようにonにする。
+(offでwp-adminにリダイレクトされたのは、(多分)バックエンドに書き換えられてスクリプトで処理できなかったため。)
+  
+・参考サイト(ProxyPreserveHost設定について)：
+[WordPressなどにリバースプロキシする際にバックエンドのホスト名でURL生成されるのを防ぐ - Qiita](https://qiita.com/undrthemt/items/a0ab7870e4e6eb99b7f6)
+
+[mod_proxy - Apache HTTP サーバ バージョン 2.4](https://httpd.apache.org/docs/2.4/mod/mod_proxy.html#proxypassreverse)
+
+・ステータスコード、、、302で帰ってきており、循環している。
+(302はリソースが見つからなかったため生じる一時的なリダイレクト)
+
+＜原因場所の特定のため、curlを実行　※ホスト側のCMDにて実行＞
+
+C:\Users\y_mashiko>curl -k https://training.com/wp-login.php
+
+C:\Users\y_mashiko>curl -k https://training.com/wp-login.php?redirect_to=https://training.com/wp-admin/index.php
+
+C:\Users\y_mashiko>curl -k https://training.com/wp-login.php?redirect_to=https://training.com/wp-admin/index.php&reauth=1
+'reauth' は、内部コマンドまたは外部コマンド、
+操作可能なプログラムまたはバッチ ファイルとして認識されていません。
+
+→何も返ってこなかった+通信関連の設定は(おそらく)正しいため、wordpress側のアクセス設定が問題となりwordpressのリソースにアクセスできていない可能性がある。
+
+
+＜wordpressにて無限ループを解消するため、wp-config.phpを修正＞
+
+[admin@localhost training.com]$ sudo vim wp-config.php
+(以下1行を追記)
+$_SERVER['HTTPS'] = 'on';
+
+→ブラウザアクセスできるようになったことを確認。
+
+・参考サイト(reverse proxy経由のwordpressコンテンツへのアクセスについて)：
+[管理画面での SSL 通信 - WordPress Codex 日本語版](https://wpdocs.osdn.jp/%E7%AE%A1%E7%90%86%E7%94%BB%E9%9D%A2%E3%81%A7%E3%81%AE_SSL_%E9%80%9A%E4%BF%A1)
+
+[【WordPress】reverse proxy経由でhttps化するとき混在コンテンツにならないようにする at softelメモ](https://www.softel.co.jp/blogs/tech/archives/5295)
+
+[【リダイレクトループ】ConoHa WINGでWordPress常時SSL化時に発生する無限リダイレクトの発生原因と対処方法](https://brionac-yu-yake.net/srv/rental-server/conoha-wing-wordpress-ssl-redirect-loop.html#ConoHa_WING%E3%81%A7%E7%84%A1%E9%99%90%E3%83%AA%E3%83%80%E3%82%A4%E3%83%AC%E3%82%AF%E3%83%88%E3%83%AB%E3%83%BC%E3%83%97%E3%81%8C%E7%99%BA%E7%94%9F%E3%81%99%E3%82%8B%E5%8E%9F%E5%9B%A0)
+
+今までは、以下のような感じでずっと循環していた。
+
+  https     (443port)         (80port)         (8080port)
+C → → → → SSL対応vhost → → → → Varnish → → → → SSL非対応vhost → → → → wordpressコンテンツ
+↑ ← ← ← ← ← ← ↑      (復号)                                            ↓
+              ↑                                                        ↓
+              ← ← ← ← ←  ← ← ← ←  ← ← ← ←  ← ← ← ←  ← ← ← ←  ← ← ← ← ← ↓
+            Varnishが平文アクセス(http)してきたため、httpsを使用させるためリダイレクト
+            
+            
+※以降無限ループ
+
+→以下設定を追加することにより、解消
+$_SERVER['HTTPS'] = 'on';
+
+→設定内容：HTTPSで通信されていることを認識させる。
+
+
+
+ 2)負荷試験の実施(キャッシュを使用　by varnish)
+
+
+＜キャッシュを有効化する。＞
+
+[admin@localhost varnish]$ sudo sed -i "s|Header add \"Cache-Control\" \"no-store\"|#Header add \"Cache-Control\" \"no-store\"|" /var/www/training.com/.htaccess
+
+[admin@localhost varnish]$ sudo systemctl restart httpd
+
+
+＜実行結果＞
+
+1.キャッシュが使用される場合
+
+ 1)(1)5人同時・(2)3分間アクセス・(3)5種類のページ にアクセス
+
+★Varnish導入前
+Lifting the server siege...
+Transactions:                    807 hits
+Availability:                 100.00 %
+Elapsed time:                 179.40 secs
+Data transferred:              18.22 MB
+Response time:                  1.10 secs
+Transaction rate:               4.50 trans/sec
+Throughput:                     0.10 MB/sec
+Concurrency:                    4.96
+Successful transactions:         807
+Failed transactions:               0
+Longest transaction:            6.16
+Shortest transaction:           0.00
+
+★Varnish導入後
+Lifting the server siege...
+Transactions:                  13345 hits
+Availability:                 100.00 %
+Elapsed time:                 179.63 secs
+Data transferred:             316.58 MB
+Response time:                  0.07 secs
+Transaction rate:              74.29 trans/sec
+Throughput:                     1.76 MB/sec
+Concurrency:                    4.89
+Successful transactions:       13345
+Failed transactions:               0
+Longest transaction:            3.24
+Shortest transaction:           0.00
+
+→16.54倍処理できていることを確認。
+
+
+ 2)(1)50人同時・(2)3分間アクセス・(3)5種類のページ にアクセス
+
+★Varnish導入前
+Lifting the server siege...
+Transactions:                    632 hits
+Availability:                 100.00 %
+Elapsed time:                 179.61 secs
+Data transferred:              14.68 MB
+Response time:                 11.61 secs
+Transaction rate:               3.52 trans/sec
+Throughput:                     0.08 MB/sec
+Concurrency:                   40.84
+Successful transactions:         632
+Failed transactions:               0
+Longest transaction:           56.80
+Shortest transaction:           0.00
+
+★Varnish導入後
+Lifting the server siege...
+Transactions:                  12946 hits
+Availability:                 100.00 %
+Elapsed time:                 180.07 secs
+Data transferred:             314.09 MB
+Response time:                  0.62 secs
+Transaction rate:              71.89 trans/sec
+Throughput:                     1.74 MB/sec
+Concurrency:                   44.36
+Successful transactions:       12978
+Failed transactions:               0
+Longest transaction:           14.07
+Shortest transaction:           0.00
+
+→20.48倍処理できていることを確認。
+
+
+ 3)(1)100人同時・(2)3分間アクセス・(3)5種類のページ にアクセス
+
+★Varnish導入前
+Lifting the server siege...
+Transactions:                    428 hits
+Availability:                 100.00 %
+Elapsed time:                 195.16 secs
+Data transferred:              10.62 MB
+Response time:                 27.35 secs
+Transaction rate:               2.19 trans/sec
+Throughput:                     0.05 MB/sec
+Concurrency:                   59.99
+Successful transactions:         428
+Failed transactions:               0
+Longest transaction:          121.44
+Shortest transaction:           0.00
+
+★Varnish導入後
+Lifting the server siege...
+Transactions:                  13239 hits
+Availability:                 100.00 %
+Elapsed time:                 179.97 secs
+Data transferred:             308.77 MB
+Response time:                  0.62 secs
+Transaction rate:              73.56 trans/sec
+Throughput:                     1.72 MB/sec
+Concurrency:                   45.81
+Successful transactions:       13325
+Failed transactions:               0
+Longest transaction:           18.72
+Shortest transaction:           0.00
+
+→30.93倍処理できていることを確認。
+
+
+ 4)(1)150人同時・(2)3分間アクセス・(3)5種類のページ にアクセスを行う。
+
+★Varnish導入前
+Transactions:                      4 hits
+Availability:                 100.00 %
+Elapsed time:                 311.55 secs
+Data transferred:               0.17 MB
+Response time:                 81.23 secs
+Transaction rate:               0.01 trans/sec
+Throughput:                     0.00 MB/sec
+Concurrency:                    1.04
+Successful transactions:           5
+Failed transactions:               0
+Longest transaction:          269.44
+Shortest transaction:           0.00
+
+★Varnish導入後
+Lifting the server siege...
+Transactions:                  13544 hits
+Availability:                 100.00 %
+Elapsed time:                 180.07 secs
+Data transferred:             317.67 MB
+Response time:                  0.80 secs
+Transaction rate:              75.22 trans/sec
+Throughput:                     1.76 MB/sec
+Concurrency:                   60.49
+Successful transactions:       13544
+Failed transactions:               0
+Longest transaction:           30.05
+Shortest transaction:           0.00
+
+→3,386倍
+※ただし導入前は固まっている時間が長くて全然処理しておらず比率がすさまじくなっただけで、同時実行数とtpsが比例しているわけではない。
+  (安定してリクエストをさばいている感じ)
+
+
+
+2.キャッシュが使用される場合(あまり変わらないことを確認する。)
+
+ 1)(1)5人同時・(2)3分間アクセス・(3)ランダム にアクセス
+★Varnish導入前
+Lifting the server siege...
+Transactions:                    768 hits
+Availability:                 100.00 %
+Elapsed time:                 179.66 secs
+Data transferred:              17.59 MB
+Response time:                  1.16 secs
+Transaction rate:               4.27 trans/sec
+Throughput:                     0.10 MB/sec
+Concurrency:                    4.95
+Successful transactions:         768
+Failed transactions:               0
+Longest transaction:            5.75
+Shortest transaction:           0.00
+
+★Varnish導入後
+Lifting the server siege...
+Transactions:                    848 hits
+Availability:                 100.00 %
+Elapsed time:                 179.46 secs
+Data transferred:              19.41 MB
+Response time:                  1.05 secs
+Transaction rate:               4.73 trans/sec
+Throughput:                     0.11 MB/sec
+Concurrency:                    4.94
+Successful transactions:         848
+Failed transactions:               0
+Longest transaction:            5.72
+Shortest transaction:           0.00
+
+→1.10倍(微増。ほとんど変わらず)
+
+
+ 2)(1)50人同時・(2)3分間アクセス・(3)ランダム にアクセス
+★Varnish導入前
+Lifting the server siege...
+Transactions:                    632 hits
+Availability:                 100.00 %
+Elapsed time:                 179.64 secs
+Data transferred:              14.66 MB
+Response time:                 11.92 secs
+Transaction rate:               3.52 trans/sec
+Throughput:                     0.08 MB/sec
+Concurrency:                   41.93
+Successful transactions:         632
+Failed transactions:               0
+Longest transaction:           55.39
+Shortest transaction:           0.00
+
+★Varnish導入後
+Lifting the server siege...
+Transactions:                    640 hits
+Availability:                  99.69 %
+Elapsed time:                 179.90 secs
+Data transferred:              14.74 MB
+Response time:                 11.81 secs
+Transaction rate:               3.56 trans/sec
+Throughput:                     0.08 MB/sec
+Concurrency:                   42.01
+Successful transactions:         640
+Failed transactions:               2
+Longest transaction:           61.81
+Shortest transaction:           0.00
+
+→1.01倍(ほとんど変わらず)
+
+
+ 3)(1)100人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+★Varnish導入前
+ Lifting the server siege...
+Transactions:                    424 hits
+Availability:                 100.00 %
+Elapsed time:                 179.77 secs
+Data transferred:              10.04 MB
+Response time:                 33.59 secs
+Transaction rate:               2.36 trans/sec
+Throughput:                     0.06 MB/sec
+Concurrency:                   79.23
+Successful transactions:         424
+Failed transactions:               0
+Longest transaction:          177.64
+Shortest transaction:           0.01
+
+★Varnish導入後
+Lifting the server siege...
+Transactions:                      0 hits
+Availability:                   0.00 %
+Elapsed time:                 196.83 secs
+Data transferred:               0.07 MB
+Response time:                  0.00 secs
+Transaction rate:               0.00 trans/sec
+Throughput:                     0.00 MB/sec
+Concurrency:                   74.83
+Successful transactions:           0
+Failed transactions:             202
+Longest transaction:           97.50
+Shortest transaction:           0.00
+
+→何回かリトライしたが、502が多発した。(たまに503エラー)
+ リバプロ(varnish)までは通信が届き、そこからコンテンツを取得してくる際にエラーになっている。
+ 443ポート→80ポート→8080ポート→コンテンツ
+ とサーバ内の処理が増加し、同時アクセス数の増加に耐えられなくなった可能性がある。
+
+
+ 4)(1)150人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+★Varnish導入前
+ Lifting the server siege...
+Transactions:                      0 hits
+Availability:                   0.00 %
+Elapsed time:                 251.42 secs
+Data transferred:               0.00 MB
+Response time:                  0.00 secs
+Transaction rate:               0.00 trans/sec
+Throughput:                     0.00 MB/sec
+Concurrency:                    0.00
+Successful transactions:           0
+Failed transactions:               0
+Longest transaction:            0.00
+Shortest transaction:           0.00
+
+★Varnish導入後
+Lifting the server siege...
+Transactions:                      0 hits
+Availability:                   0.00 %
+Elapsed time:                 208.18 secs
+Data transferred:               0.07 MB
+Response time:                  0.00 secs
+Transaction rate:               0.00 trans/sec
+Throughput:                     0.00 MB/sec
+Concurrency:                   86.14
+Successful transactions:           0
+Failed transactions:             230
+Longest transaction:          148.09
+Shortest transaction:           0.00
+
+→導入前同様さばけていない。
+
+◆総括
+・数種類(今回は5種類)のURLに対し同時実行数が増えた場合、キャッシュにより安定したtpsを保つ。
+・ランダムアクセス(今回は1000種類)に対し同時実行数は増えた場合、キャッシュを使用しない+リバプロを経由したサーバ内処理がボトルネックになり、全然リクエストをさばけなくなる。
+
+
+
+3)varnishの設定追加(GETリクエストのみキャッシュ+ログイン画面はキャッシュしないように設定)
+
+＜ログイン画面と管理者画面をキャッシュ無効化検証のため、画面からユーザを1つ追加＞
+
+→ユーザ情報
+氏名         ：wp_hoge
+メールアドレス：wp_hoge@training.com
+パスワード    ：xxxxxxxxxxxxxxxxx
+権限グループ  ：管理者
+
+
+・wordpressはリクエストに以下が含まれている場合はデフォルトでキャッシュしないようになっている。
+
+wp-login
+wp-admin
+wp-comments
+wp-post.php
+wp-cron.php)
+
+・参考サイト(wordpressキャッシュ仕様について)：
+<https://cdn.tokyo/docs/wordpress-cache/>
+
+※上記の通りキャッシュされないことを確認するために、index.php(https://training.com/wp-admin/index.php)にアクセスしキャッシュされないことを確認。
+(ブラウザキャッシュが効かないようにchromeとedgeを使用)
+  
+  
+→wp-adminへのアクセスをキャッシュ対象に変更してみてキャッシュされることを確認する。
+
+★varnishキャッシュ追加条件
+1.キャッシュの対象はGETリクエストのみにする。
+2.wp-adminへのアクセスについて、キャッシュ対象外の設定をいれる。
+(デフォルトでキャッシュ対象外になっているため、デフォルト設定を変更した上でVarnishの設定にてキャッシュ対象外にしてみる。)
+
