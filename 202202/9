@@ -1,0 +1,358 @@
+ [2022/2/9]研修タスクまとめ
+ 
+ ◆大枠
+ 1)ベンチマークテスト　※一部再実行。9_benchに結果記載
+ 2)varnishの設定追加(GETリクエストのみキャッシュ+ログイン画面はキャッシュしないように設定)
+ 3)yumで環境を構築し、buildした環境と比較
+
+
+ ◆前提事項
+★varnishキャッシュ追加条件
+
+ 1.キャッシュの対象はGETリクエストのみにする。
+ 2.wp-adminへのアクセスについて、キャッシュ対象外の設定をいれる。
+ (デフォルトでキャッシュ対象外になっているため、デフォルト設定を変更した上でVarnishの設定にてキャッシュ対象外にしてみる。)
+ 
+
+ ◆想定作業手順
+  1.varnishログをテキスト出力する。(hit|miss用)
+  2.設定変更(アクセスコントロール・GETメソッドだけ許容)
+  3.設定反映確認
+
+[[Varnish]URLごとにキャッシュの hit/miss を集計する。 – Siguniang's Blog](https://siguniang.wordpress.com/2013/11/01/varnish-cache-hit-miss-logging/)
+
+ ◆実作業手順
+
+ 1.varnishログをテキスト出力する。(hit|miss用)
+
+＜アクセス時のログをファイルに出力＞
+
+[admin@localhost logs]$ sudo varnishncsa -F '%U%q %{Varnish:handling}x' -w cache.log
+
+・参考サイト(Varnishログ出力)：
+<https://siguniang.wordpress.com/2013/11/01/varnish-cache-hit-miss-logging/>
+
+2.設定変更(アクセスコントロール・GETメソッドだけ許容)
+
+＜curlでリクエスト＞
+
+ 1).ログイン画面にアクセス。
+curl -X GET -k -c cookie.txt https://training.com/wp-login.php
+
+ 2).form要素のinput項目をすべて埋める。
+curl -X POST -k -L -b cookie.txt -c cookie.txt -F log="admin" -F pwd="UPDiRJq%EfSSX)lQW0" -F rememberme="forever" -F wp-submit="ログイン" -F redirect_to="https://training.com/wp-admin/index.php" -F testcookie="1" https://training.com/wp-login.php
+
+ 3).wp-adminのコンテンツにアクセス。(以下をサンプル)
+curl -X GET -k -L -c cookie.txt https://training.com/wp-admin/index.php
+curl -X GET -k -L -c cookie.txt https://training.com/wp-admin/about.php
+
+
+＜curlにて複数回アクセスを行い、Varnishのログを確認＞
+
+[admin@localhost logs]$ tail -f cache.log
+/wp-login.php miss
+/wp-login.php pass
+/wp-login.php pass
+/wp-login.php pass
+/wp-login.php pass
+/wp-login.php pass
+/wp-admin/index.php pass
+/wp-login.php pass
+/wp-admin/index.php pass
+/wp-login.php pass
+/wp-admin/index.php pass
+/wp-admin/index.php miss
+/wp-login.php?redirect_to=https%3A%2F%2Ftraining.com%2Fwp-admin%2Findex.php&reauth=1 miss
+/wp-admin/index.php pass
+/wp-login.php?redirect_to=https%3A%2F%2Ftraining.com%2Fwp-admin%2Findex.php&reauth=1 pass
+/wp-admin/index.php pass
+/wp-login.php?redirect_to=https%3A%2F%2Ftraining.com%2Fwp-admin%2Findex.php&reauth=1 pass
+/wp-admin/index.php pass
+/wp-login.php?redirect_to=https%3A%2F%2Ftraining.com%2Fwp-admin%2Findex.php&reauth=1 pass
+/wp-admin/index.php pass
+/wp-login.php?redirect_to=https%3A%2F%2Ftraining.com%2Fwp-admin%2Findex.php&reauth=1 pass
+/wp-admin/index.php pass
+/wp-login.php?redirect_to=https%3A%2F%2Ftraining.com%2Fwp-admin%2Findex.php&reauth=1 pass
+/wp-login.php pass
+/wp-admin/index.php pass
+
+→wp-loginやwp-adminについてはデフォルトでキャッシュされていないことを確認。
+ (cookieがはいっているため。)
+
+＜試しに、他のWEBページについてはキャッシュされることを確認＞
+
+C:\Users\y_mashiko>curl -k https://training.com/2022/02/test1000/
+　※5回程実施
+
+・Varnishログ
+/2022/02/test1000/ miss
+/2022/02/test1000/ hit
+/2022/02/test1000/ hit
+/2022/02/test1000/ hit
+/2022/02/test1000/ hit
+
+→2回目以降のアクセス時にキャッシュされていることを確認。
+
+
+管理者関連のページはキャッシュされないため、今回は設定反映の確認として
+以下ページをキャッシュしないよう変更する。
+/2022/02/test1000/
+
++GETリクエストのみキャッシュする設定を行う。
+
+・参考サイト(VCLについて)：
+[Varnish の設定ファイルである VCL はどういうものか（４）](https://reboot.makeall.net/2013/02/18/what-vcl-on-varnish-04/)
+
+[Varnishを使う際に覚えておきたいデフォルトの罠 – cat /dev/random > /dev/null &](https://blog.xcir.net/?p=1088)
+
+[VarnishでGETメソッド以外をキャッシュしない方法 \| iret.media](https://cloudpack.media/1183)
+
+cf)vclはdefault.vclに記述し、設定していない項目はすべてbuiltin.vclにあらかじめ記載されている内容が適用される。
+
+
+＜vclファイルに設定追加を行う。＞
+
+[admin@localhost varnish]$ sudo vim default.vcl
+
+sub vcl_recv {
+    # Happens before we check if we have this in cache already.
+    #
+    # Typically you clean up the request here, removing cookies you don't need,
+    # rewriting the request, etc.
+★     if(req.method == "GET") {
+★      return (lookup);
+★     }
+★       return (pass);
+★     }
+☆    if (req.url == "/2022/02/test1000") {
+☆       return (pass);
+☆    }
+
+}
+
+★リクエストメソッドがGETだったらlookup(キャッシュされているか確認)
+  その他だったらpass(バックエンドにリクエストを送る。)
+
+☆リクエストURLが"/2022/02/test1000"だったらpass(バックエンドにリクエスト送る。)
+
+
+＜Varnishのサービス再起動＞
+
+[admin@localhost varnish]$ sudo systemctl restart varnish
+Job for varnish.service failed because the control process exited with error code. See "systemctl status varnish.service" and "journalctl -xe" for details.
+
+[admin@localhost varnish]$ journalctl -xe
+
+ 2月 09 17:29:13 localhost.localdomain varnishd[19442]: ---------------######--
+ 2月 09 17:29:13 localhost.localdomain varnishd[19442]: ...in subroutine "vcl_recv"
+ 2月 09 17:29:13 localhost.localdomain varnishd[19442]: ('input' Line 21 Pos 5)
+ 2月 09 17:29:13 localhost.localdomain varnishd[19442]: sub vcl_recv {
+ 2月 09 17:29:13 localhost.localdomain varnishd[19442]: ----########--
+ 2月 09 17:29:13 localhost.localdomain varnishd[19442]: ...which is the "vcl_recv" method
+ 2月 09 17:29:13 localhost.localdomain varnishd[19442]: Legal returns are: "hash" "pass" "pipe" "purge" "synth"
+ 2月 09 17:29:13 localhost.localdomain varnishd[19442]: Running VCC-compiler failed, exited with 2
+ 2月 09 17:29:13 localhost.localdomain varnishd[19442]: VCL compilation failed
+ 2月 09 17:29:13 localhost.localdomain systemd[1]: varnish.service: control process exited, code=exited status=2
+ 2月 09 17:29:13 localhost.localdomain systemd[1]: Failed to start Varnish Cache, a high-performance HTTP accelerator.
+-- Subject: Unit varnish.service has failed
+
+→エラーになる。
+
+＜Legal returns are: "hash" "pass" "pipe" "purge" "synth"
+  とあるので、「lookup」ではなくこれらを使用するように記載を改める。＞
+
+[admin@localhost varnish]$ sudo vim default.vcl
+
+sub vcl_recv {
+    # Happens before we check if we have this in cache already.
+    #
+    # Typically you clean up the request here, removing cookies you don't need,
+    # rewriting the request, etc.
+★     if(req.method != "GET") {
+★       return (pass);
+★     }
+
+☆    if (req.url == "/2022/02/test1000/") {
+☆       return (pass);
+☆    }
+
+}
+
+[admin@localhost varnish]$ sudo systemctl restart varnish
+
+→上記の通りに修正したら正常に稼働したことを確認。
+
+(修正前)
+「GETメソッドの場合はlookupを返す」
+
+(修正後)
+「GETメソッド以外の場合はpassを返す」
+
+　※この記載が一般的かは不明、、、
+
+
+
+3.設定反映確認
+
+＜ブラウザにてWEBページにアクセスし、以下の通り結果の結果が得られるか確認。
+https://training.com/2022/02/test999/  →キャッシュされる。
+https://training.com/2022/02/test1000/  →上記設定によりキャッシュされない。
+＞
+
+[admin@localhost logs]$ tail -f cache.log
+/wp-admin/admin-ajax.php pass
+/wp-admin/admin-ajax.php pass
+/2022/02/test1000/ pass
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 miss
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 miss
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 miss
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba miss
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 miss
+/wp-admin/admin-ajax.php pass
+/favicon.ico miss
+/wp-includes/images/w-logo-blue-white-bg.png miss
+/2022/02/test1000/ pass
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 hit
+/favicon.ico hit
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 hit
+/favicon.ico hit
+/wp-admin/admin-ajax.php pass
+/2022/02/test999/ miss
+/favicon.ico hit
+/2022/02/test999/ hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 hit
+/2022/02/test999/ hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 hit
+/2022/02/test999/ hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 hit
+/2022/02/test999/ hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 hit
+/2022/02/test999/ hit
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 hit
+/2022/02/test999/ hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 hit
+/2022/02/test999/ hit
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 hit
+/favicon.ico hit
+/2022/02/test999/ hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 hit
+/2022/02/test999/ hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+/wp-includes/js/wp-emoji-release.min.js?ver=5.9 hit
+/2022/02/test999/ hit
+/wp-includes/blocks/navigation/view.min.js?ver=3776ea67846b3bb10fe8f7cdd486b0ba hit
+/wp-content/themes/twentytwentytwo/style.css?ver=1.0 hit
+/wp-includes/blocks/navigation/style.min.css?ver=5.9 hit
+/wp-content/themes/twentytwentytwo/assets/fonts/SourceSerif4Variable-Roman.ttf.woff2 hit
+
+→結果が想定通りとなることを確認。
+/2022/02/test1000/ pass
+/2022/02/test999/ hit
+
+
+＜curlコマンドでも実行＞
+
+C:\Users\y_mashiko>curl -k https://training.com/2022/02/test1000/
+(10回くらい実施)
+
+C:\Users\y_mashiko>curl -k https://training.com/2022/02/test999/
+(10回くらい実施)
+
+[admin@localhost logs]$ tail -f cache.log
+/2022/02/test1000/ pass
+/wp-admin/admin-ajax.php pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/wp-admin/admin-ajax.php pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/2022/02/test1000/ pass
+/wp-admin/admin-ajax.php pass
+/2022/02/test999/ miss
+/2022/02/test999/ hit
+/2022/02/test999/ hit
+/2022/02/test999/ hit
+/2022/02/test999/ hit
+/2022/02/test999/ hit
+/2022/02/test999/ hit
+/2022/02/test999/ hit
+/2022/02/test999/ hit
+/2022/02/test999/ hit
+/2022/02/test999/ hit
+
+→結果が想定通りとなることを確認。
+
+
+＜curlコマンドにてPOSTメソッドを試してみる。＞
+
+C:\Users\y_mashiko>curl -XPOST -k https://training.com/2022/02/test999/
+
+[admin@localhost logs]$ tail -f cache.log
+/2022/02/test999/ pass
+/2022/02/test999/ pass
+/2022/02/test999/ pass
+/2022/02/test999/ pass
+/2022/02/test999/ pass
+/2022/02/test999/ pass
+/2022/02/test999/ pass
+/2022/02/test999/ pass
+/2022/02/test999/ pass
+/2022/02/test999/ pass
+
+→passになることを確認。
+
