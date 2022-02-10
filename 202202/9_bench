@@ -1,0 +1,80 @@
+ [2022/2/9]追加ベンチマークテスト
+
+ 3)(1)100人同時・(2)3分間アクセス・(3)ランダム にアクセスを行う。
+
+1回目
+
+Lifting the server siege...
+Transactions:                    158 hits
+Availability:                  48.92 %
+Elapsed time:                 180.54 secs
+Data transferred:               3.85 MB
+Response time:                 85.20 secs
+Transaction rate:               0.88 trans/sec
+Throughput:                     0.02 MB/sec
+Concurrency:                   74.56
+Successful transactions:         158
+Failed transactions:             165
+Longest transaction:           80.73
+Shortest transaction:           0.00
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+サービス落とし上げ実施
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+
+2回目
+
+Lifting the server siege...
+Transactions:                     77 hits
+Availability:                  29.17 %
+Elapsed time:                 181.92 secs
+Data transferred:               1.92 MB
+Response time:                185.94 secs
+Transaction rate:               0.42 trans/sec
+Throughput:                     0.01 MB/sec
+Concurrency:                   78.70
+Successful transactions:          77
+Failed transactions:             187
+Longest transaction:           86.33
+Shortest transaction:           0.00
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+サービス落とし上げ実施
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+
+3回目
+
+Lifting the server siege...
+Transactions:                    172 hits
+Availability:                  50.89 %
+Elapsed time:                 184.43 secs
+Data transferred:               4.45 MB
+Response time:                 86.04 secs
+Transaction rate:               0.93 trans/sec
+Throughput:                     0.02 MB/sec
+Concurrency:                   80.24
+Successful transactions:         172
+Failed transactions:             166
+Longest transaction:           92.39
+Shortest transaction:           0.00
+
+
+
+→以下2種類のエラーが出る。
+
+[admin@localhost logs]$ pwd
+/usr/local/apache2/logs
+[admin@localhost logs]$ less error_log
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+[Wed Feb 09 11:38:53.432480 2022] [proxy:error] [pid 6311] [client 192.168.56.111:43948] AH00898: Error reading from remote server returned by /2022/02/test199/
+
+[Wed Feb 09 11:39:05.413021 2022] [proxy_http:error] [pid 6295] (70007)The timeout specified has expired: [client 192.168.56.111:43960] AH01102: error reading status line from remote server 192.168.56.111:80
+
+→Varnishまでアクセスが届き、そこからwordpressコンテンツの取得時にタイムアウトが発生している。
+(今回はキャッシュしていないコンテンツへのアクセスを大量に発生させたため。)
+
+
+備考)昨日まったくさばけていなかったリクエストを多少さばけるようになっているのは、
+     サーバのウォームアップ後にテストを実行したから、、？
+     (昨日はウォームアップ中にやってしまった。)
