@@ -1,0 +1,384 @@
+ [2022/2/10]研修タスクまとめ
+ 
+ ◆大枠
+ 1)yumで環境を構築し、buildした環境と比較
+ 2)セキュリティハンズオン
+ 
+ ◆実作業手順
+ 
+ ＜Linux仮想サーバを新規構築＞
+ 
+ ～VirtualBoxにて作業～
+ 
+
+ ＜ビルドしたlampのバージョン確認　※ビルド環境にて実施＞
+ 
+※ソースビルドしたため、デフォルトのyum listよりもバージョンが新しい。
+
+★apache
+[admin@localhost ~]$ httpd -v
+Server version: Apache/2.4.52 (Unix)
+Server built:   Jan 30 2022 20:00:50
+
+★mysql
+[admin@localhost ~]$ mysql --version
+mysql  Ver 8.0.27 for Linux on x86_64 (Source distribution)
+
+★php
+[admin@localhost ~]$ php --version
+PHP 8.0.15 (cli) (built: Jan 30 2022 21:07:21) ( NTS )
+
+
+ ＜yumにてインストールするため、apache最新バージョンを管理するリポジトリを登録＞
+ [admin@localhost ~]$ sudo yum install epel-release
+ [admin@localhost ~]$ sudo yum -y install https://repo.ius.io/ius-release-el7.rpm
+ 
+ 
+ ＜同一バージョンがインストール可能なことを確認する＞
+ [admin@localhost ~]$ yum list --disablerepo=base,extras,updates --enablerepo=ius | grep "httpd"
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+httpd24u.x86_64                         2.4.52-1.el7.ius               ius
+httpd24u-devel.x86_64                   2.4.52-1.el7.ius               ius
+httpd24u-mod_ssl.x86_64                 1:2.4.52-1.el7.ius             ius
+
+＜apacheインストール試行1回目＞
+[admin@localhost ~]$ sudo yum install --disablerepo=base,extras,updates --enablerepo=ius httpd httpd-devel mod_ssl
+
+～～～～～～～～～～～～～～～～～～～～～～～～ｘxl7.x86_64 (ius)
+             要求: openldap-devel(x86-64)
+エラー: パッケージ: httpd24u-2.4.52-1.el7.ius.x86_64 (ius)
+             要求: /etc/mime.types
+エラー: パッケージ: apr15u-util-devel-1.5.4-3.ius.el7.x86_64 (ius)
+             要求: expat-devel(x86-64)
+エラー: パッケージ: apr15u-util-devel-1.5.4-3.ius.el7.x86_64 (ius)
+             要求: libdb-devel(x86-64)
+
+→必要パッケージのインストールを行う必要あり。
+
+＜apacheインストールに必要なパッケージをインストール＞
+[admin@localhost ~]$ sudo yum install openldap-devel expat-devel libdb-devel mailcap
+
+・参考サイト(mailcapについて)：
+https://iblinux.rios.co.jp/PyJdoc/lib-j/module-mailcap.html
+
+＜apacheインストール試行2回目＞
+[admin@localhost ~]$ sudo yum install --disablerepo=base,extras,updates --enablerepo=ius httpd httpd-devel mod_ssl
+
+[admin@localhost ~]$ httpd -v
+Server version: Apache/2.4.52 (IUS)
+
+→同一のバージョンがインストールされたことを確認。
+
+＜apache稼働確認＞
+[admin@localhost ~]$ sudo systemctl start httpd
+[admin@localhost ~]$ sudo systemctl status httpd
+● httpd.service - The Apache HTTP Server
+   Loaded: loaded (/usr/lib/systemd/system/httpd.service; disabled; vendor preset: disabled)
+   Active: active (running) since 木 2022-02-10 12:35:55 JST; 3s ago
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+
+[admin@localhost ~]$ curl http://localhost
+<html><body><h1>It works!</h1></body></html>
+
+→稼働していることを確認。
+
+
+＜index.htmlの場所を確認＞
+
+[admin@localhost html]$ sudo find / -name 'index.html'
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+/usr/share/httpd/noindex/index.html
+
+→ソースビルドした時と違うディレクトリにインストールされていることを確認。
+(ソースビルドした時：/usr/local/apache2/htdocs)
+
+＜Mysqlインストール試行＞
+[admin@localhost ~]$ sudo yum install https://downloads.mysql.com/archives/get/p/23/file/mysql-community-server-8.0.27-1.el7.x86_64.rpm
+
+→ビルド環境と同様8.0.27をインストール
+
+＜Mysql稼働確認＞
+[admin@localhost ~]$ sudo systemctl start mysqld
+[admin@localhost ~]$ sudo systemctl status mysqld
+● mysqld.service - MySQL Server
+   Loaded: loaded (/usr/lib/systemd/system/mysqld.service; enabled; vendor preset: disabled)
+
+[admin@localhost ~]$ sudo grep 'temporary password' /var/log/mysqld.log
+2022-02-10T04:14:23.476609Z 6 [Note] [MY-010454] [Server] A temporary password is generated for root@localhost: oa&)M*tbi8gw
+
+[admin@localhost ~]$ mysql -uroot -p
+Enter password:
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 8
+Server version: 8.0.27
+
+Copyright (c) 2000, 2022, Oracle and/or its affiliates.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql> ALTER USER 'root'@'localhost' IDENTIFIED BY 'xxxxxx';
+Query OK, 0 rows affected (0.02 sec)
+
+mysql> exit
+Bye
+
+→1)ログイン可能なこと、2)SQL発行可能なこと(ALTER文)なことを確認
+
+＜php8.0をインストールするため、remiリポジトリを登録＞
+[admin@localhost ~]$ sudo yum install https://rpms.remirepo.net/enterprise/remi-release-7.rpm
+
+＜phpインストール試行＞
+[admin@localhost ~]$ sudo yum install  php80 php-mysql php80-php-devel
+
+＜phpのバージョン確認＞
+[admin@localhost ~]$ php80 --version
+PHP 8.0.15 (cli) (built: Jan 18 2022 12:16:19) ( NTS gcc x86_64 )
+Copyright (c) The PHP Group
+Zend Engine v4.0.15, Copyright (c) Zend Technologies
+
+→php8.0がインストールされたことを確認。
+
+
+＜phpのサンプルプログラムを作成＞
+[admin@localhost html]$ cd /var/www/html
+[admin@localhost html]$ sudo vim index.php
+
+<?php
+phpinfo();
+?>
+
+→phpinfoを表示するプログラムを用意
+
+＜ブラウザから見るためにhttp,httpsプロトコルによる通信を許可＞
+[admin@localhost html]$ sudo firewall-cmd --add-service=http --zone=public --permanent
+success
+[admin@localhost html]$ sudo firewall-cmd --add-service=https --zone=public --permanent
+success
+firewall-cmd: error: unrecognized arguments: reload
+[admin@localhost html]$ sudo firewall-cmd --reload
+success
+
+＜ブラウザアクセスができるよう、ホストとゲストが同一LANに置かれるよう設定＞
+
+～VirtualBox作業
+　ホストオンリーアダプタを追加
+
+＜DHCPで振られたIPを確認＞
+[admin@localhost ~]$ ifconfig
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+enp0s8: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+        inet 192.168.56.112  netmask 255.255.255.0  broadcast 192.168.56.255
+        inet6 fe80::6f12:e0c1:9755:d691  prefixlen 64  scopeid 0x20<link>
+        ether 08:00:27:17:dd:e2  txqueuelen 1000  (Ethernet)
+        RX packets 17  bytes 2560 (2.5 KiB)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 26  bytes 4530 (4.4 KiB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+→index.htmlは表示されることを確認。
+ index.phpはphpファイルとして認識されず、以下のように表示される。(mod_phpの導入をしていないため。)
+ 
+ <?php
+phpinfo();
+?>
+
+補足)mod_phpについて
+・apache moduleについて、php80_phpを使用すればよさそう。
+
+↓公式より抜粋
+the Apache module, php80-php, is available, but of course, only one mod_php can be used (so you have to disable or uninstall any other, the one provided by the default "php" package still have priority)
+[PHP 8.0 as Software Collection - Remi's RPM repository - Blog](https://blog.remirepo.net/post/2020/04/10/PHP-8.0-as-Software-Collection)
+
+＜php80-phpをインストール＞
+
+[admin@localhost modules]$ sudo yum install php80-php
+
+[admin@localhost httpd]$ pwd
+/etc/httpd
+
+＜mod_php設定確認＞
+
+[admin@localhost httpd]$ sudo grep -R Load . | grep php
+./conf.modules.d/20-php80-php.conf:# Cannot load both php5, php7 and php modules
+./conf.modules.d/20-php80-php.conf:      LoadModule php_module modules/libphp80.so
+
+→mod_phpがロードされていることを確認
+
+＜apache設定の確認＞
+
+[admin@localhost html]$ httpd -V
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+Server MPM:     prefork
+
+→preforkになっていることを確認
+
+＜apache落とし上げ＞
+
+[admin@localhost conf.modules.d]$ sudo systemctl restart httpd
+
+＜ブラウザ検証＞
+
+http://192.168.56.112/index.php
+
+→phpinfoが表示されていることを確認。
+
+
+＜wordpress用データベース作成＞
+
+mysql> create database wordpress
+    -> ;
+Query OK, 1 row affected (0.02 sec)
+
+→データベースを作成
+
+＜wordpress用ユーザ作成＞
+
+mysql> create user 'wp-usr'@'localhost' identified by 'xxxx';
+Query OK, 0 rows affected (0.03 sec)
+
+mysql> grant all on wordpress.* to 'wp-usr'@'localhost';
+Query OK, 0 rows affected (0.02 sec)
+
+→wordpress用ユーザを作成して、データベースの権限付与
+
+＜php～mysql間の通信確認＞
+[admin@localhost html]$ sudo vim check_db.php
+
+---------------------------------------------------------------
+<?php
+
+$link = mysqli_connect('localhost', 'wp-usr', 'wp_1234', 'wordpress');
+
+// 接続状況をチェックします
+if (mysqli_connect_errno()) {
+    die("DB_NG:" . mysqli_connect_error() . "\n");
+} else {
+    echo "DB_OK\n";
+}
+
+?>
+---------------------------------------------------------------
+
+→DB接続可否を確認するプログラムを用意
+
+＜ブラウザにて上記プログラムにアクセス＞
+
+http://192.168.56.112/check_db.php
+
+→500エラーになる
+
+＜ドライバを入れ忘れていたので、mysqlndをインストール＞
+
+[admin@localhost html]$ sudo yum install php80-php-mysqlnd
+
+・コネクタについて
+
+[PHP: どのライブラリを選ぶか - Manual](https://www.php.net/manual/ja/mysqlinfo.library.choosing.php)
+
+[PHPからMySQLに接続するための最適な方法 \| PHP Junkie](https://php-junkie.net/beginner/mysql-connection/#how)
+
+＜ブラウザにて上記プログラムに再度アクセス＞
+
+http://192.168.56.112/check_db.php
+
+→「DB_OK」と表示されることを確認。
+
+＜その他、wordpress導入のため設定を確認。＞
+
+[admin@localhost httpd]$ sudo grep -R -i mod_rewrite .
+./conf.modules.d/00-base.conf:LoadModule rewrite_module modules/mod_rewrite.so
+
+→mod_rewriteがロードされていることを確認。
+
+[admin@localhost httpd]$ sudo grep -R -i mod_ssl .
+./conf.modules.d/00-ssl.conf:LoadModule ssl_module modules/mod_ssl.so
+
+→mod_sslがロードされていることを確認。
+
+＜wordpress用にマルチ文字対応＞
+
+[admin@localhost httpd]$ sudo yum install php80-php-mbstring
+
+
+＜MySQLのconfigファイルをfind＞
+
+[admin@localhost training.com]$ sudo find / -name "my.cnf"
+/etc/my.cnf
+
+→自分でビルドした時と同じディレクトリにファイルが存在することを確認。
+
+＜現在の設定内容を確認＞
+
+[admin@localhost training.com]$ less /etc/my.cnf
+
+[mysqld]
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+コメント
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+datadir=/var/lib/mysql
+socket=/var/lib/mysql/mysql.sock
+
+log-error=/var/log/mysqld.log
+pid-file=/var/run/mysqld/mysqld.pid
+
+※ビルドした時の初期設定と変わりなし。
+
+
+＜ビルドした環境のconfigファイルを確認(コメントは削除)＞
+
+[mysqld]
+datadir=/var/lib/mysql
+socket=/tmp/mysql.sock
+symbolic-links=0
+general_log=1
+general_log_file=/var/log/mysql/general-query.log
+character-set-server=utf8mb4
+collation-server=utf8mb4_0900_ai_ci
+expire_logs_days=7
+skip_name_resolve=1
+sysdate-is-now=1
+skip_slave_start=1
+tmp_table_size=32MB
+max_heap_table_size=32MB
+log_bin=/var/log/mysql/bin.log
+log_bin_index=/var/log/mysql/bin.list
+max_binlog_size=128M
+server-id=1
+innodb_flush_log_at_trx_commit=1
+sync_binlog=1
+secure-file-priv=/var/log/mysql/
+
+[mysqld_safe]
+log-error=/var/log/mysql/mysql.log
+pid-file=/var/run/mysql/mysql.pid
+
+!includedir /etc/my.cnf.d
+
+→wordpress用に設定したconfigのため、そのままyum構築環境のconfigファイルにも適用する。
+
+＜my.cnfの設定を修正＞
+
+[admin@localhost /]$ sudo vim /etc/my.cnf
+
+[admin@localhost /]$ sudo systemctl restart mysqld
+Job for mysqld.service failed because the control process exited with error code. See "systemctl status mysqld.service" and "journalctl -xe" for details.
+
+[admin@localhost /]$ journalctl -xe
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+2月 10 18:26:05 localhost.localdomain setroubleshoot[19571]: SELinux is preventing /usr/sbin/mysqld from create access on the sock_file mysql.sock.
+
+→config修正後にサービスの落とし上げを実施した際に、SELinuxに邪魔されてエラーに、、、
+
+
+・参考サイト(SELinuxに邪魔される原因について)：
+
+[「SELinuxのせいで動かない」撲滅ガイド - Qiita](https://qiita.com/yunano/items/857ab36faa0d695573dd)
+
+
+＜SELinuxが有効な状態で、エラーの解消を行う。＞
+2022/2/10 19:11時点でここまで。
