@@ -105,7 +105,7 @@ Server version: Apache/2.4.52 (IUS)
    Loaded: loaded (/usr/lib/systemd/system/mysqld.service; enabled; vendor preset: disabled)
 
 [admin@localhost ~]$ sudo grep 'temporary password' /var/log/mysqld.log
-2022-02-10T04:14:23.476609Z 6 [Note] [MY-010454] [Server] A temporary password is generated for root@localhost: oa&)M*tbi8gw
+2022-02-10T04:14:23.476609Z 6 [Note] [MY-010454] [Server] A temporary password is generated for root@localhost: xxxxxxxxxxx
 
 [admin@localhost ~]$ mysql -uroot -p
 Enter password:
