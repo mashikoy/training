@@ -1,0 +1,165 @@
+ [2022/2/12]研修タスクまとめ
+ 
+ ◆大枠
+  1.wordpressの導入を行う。
+  (LAMP環境のインストールは完了)
+  2.buildした環境とディレクトリ構成やconfigファイルについて比較を行う。
+ 
+ ◆前提
+ xdebugやguzzleなど、wordpress導入においての必須条件でないものについては
+ 導入対象外とする。
+ (varnishについては非機能要件として必須と解釈し、導入対象とする。)
+ 
+ ◆wordpress導入手順
+ 1.以下のようにサイトを分離する。
+　静的コンテンツ     (80ポート)       ：/var/www/html(非SSL)            ←※1
+　wordpressコンテンツ(8080・443ポート)：/var/www/training.com(SSL)
+
+ 2.wordpressのインストールを行う。
+
+ 3.varnishを導入する。
+  レスポンス改善の確認として、一度だけabコマンドにてテストを行う。　←※2
+
+※1 以下の点で、ソースコンパイル時とディレクトリ構成が異なる。
+ ソースビルド時      ：/usr/local/apache2/htdocs
+ yumでインストール時 ：/var/www/html
+ 
+※2 ソースビルド時はseigeを使用していた
+   +今回は1サイトに対してのみテストを実施するためabコマンドにてテストを行う
+
+◆実作業手順
+
+＜httpd-vhosts.confを用意＞
+
+[admin@localhost www]$ sudo find / -name "*httpd-vhosts.conf*"
+/usr/share/doc/httpd24u-2.4.52/httpd-vhosts.conf
+
+[admin@localhost conf.d]$ sudo cp /usr/share/doc/httpd24u-2.4.52/httpd-vhosts.conf /etc/httpd/conf.d
+
+※conf.d以下の.confファイルはすべて読みこまれる。
+[admin@localhost conf]$ less httpd.conf
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+IncludeOptional conf.d/*.conf
+
+
+＜8080ポートの追加を行うため、confファイルにListenポートを追記。＞
+
+[admin@localhost conf]$ sudo vim httpd.conf
+
+＜修正前＞
+Listen 80
+
+＜修正後＞
+Listen 80
+Listen 8080
+
+
+＜vhost.confの修正時にSSL設定も行うため、事前に証明書作成を行う。＞
+[admin@localhost httpd]$ sudo mkdir .ssl && cd .ssl
+[admin@localhost httpd]$ sudo vim san.txt
+subjectAltName = DNS:training.com, IP:192.168.56.112
+
+[admin@localhost .ssl]$ sudo openssl genrsa -out server.key 2048
+[admin@localhost .ssl]$ sudo openssl req -new -key server.key -sha256 -out server.csr -subj "/C=JP/ST=Tokyo/L=Shibuyaku/O=Training Inc./OU=Training Section/CN=training.com"
+[admin@localhost .ssl]$ sudo openssl x509 -req -days 365 -sha256 -in server.csr -signkey server.key -out server.crt -extfile san.txt
+
+
+＜httpd-vhosts.confを修正＞
+
+[admin@localhost conf]$ sudo vim httpd.conf
+
+＜以下、丸々追記＞
+
+<VirtualHost *:8080>
+    RewriteEngine on
+    RewriteCond %{HTTPS} off
+    RewriteRule ^/(.*)$ https://training.com/$1 [R=301,L]
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerAdmin webmaster@training.com
+    DocumentRoot "/var/www/training.com"
+    ServerName training.com
+    ErrorLog "logs/training.com-error_log"
+    CustomLog "logs/training.com-access_log" common
+
+    #ssl setting
+    SSLEngine on
+    SSLProtocol +TLSv1.2
+    SSLCertificateFile /etc/httpd/.ssl/server.crt
+    SSLCertificateKeyFile /etc/httpd/.ssl/server.key
+
+   <Directory "/var/www/training.com">
+       Options Indexes FollowSymLinks
+       AllowOverride All
+       Require all granted
+
+    #Basic Authentication config
+
+       #AuthType Basic
+       #AuthName "Basic Authentication"
+       #AuthUserFile /usr/local/apache2/conf/.htpasswd
+       #require valid-user
+
+       <FilesMatch .php$>
+          SetHandler application/x-httpd-php
+       </FilesMatch>
+   </Directory>
+</VirtualHost>
+
+＜構文チェック＞
+
+[admin@localhost conf.d]$ httpd -t
+Syntax OK
+
+
+＜サービス再起動＞
+
+[admin@localhost conf.d]$ sudo systemctl restart httpd
+[admin@localhost conf.d]$ sudo systemctl status httpd
+● httpd.service - The Apache HTTP Server
+   Loaded: loaded (/usr/lib/systemd/system/httpd.service; disabled; vendor preset: disabled)
+   Active: active (running) since 土 2022-02-12 17:20:11 JST; 5s ago
+
+＜phpファイルをすべてtraining.comに移動＞
+
+[admin@localhost html]$ find . -name "*php" | xargs -I% sudo mv % ../training.com/
+
+＜8080ポートの開放＞
+
+[admin@localhost training.com]$ sudo firewall-cmd  --permanent --add-port=8080/tcp
+success
+[admin@localhost training.com]$ sudo firewall-cmd --reload
+success
+
+＜hostsファイルの書き換え　※ホスト側＞
+
+#ビルド環境
+#192.168.56.111 training.com
+
+#yum環境
+192.168.56.112 training.com
+
+＜ブラウザアクセス実行＞
+
+https://training.com/info.php
+
+→pfpinfoの情報がみれることを確認。
+
+＜ブラウザアクセス実行(リダイレクト確認)
+
+http://192.168.56.112:8080/info.php
+
+→https://training.com/info.phpにリダイレクトされることを確認
+
+＜サーバのhostsも修正(Varnish導入時のために、、、)＞
+
+[admin@localhost training.com]$ sudo vim /etc/hosts
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+192.168.56.112 training.com
+
+[admin@localhost training.com]$ curl training.com
+<html><body><h1>It works!</h1></body></html>
+
+→名前解決できることを確認
+
