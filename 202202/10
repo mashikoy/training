@@ -382,3 +382,94 @@ Job for mysqld.service failed because the control process exited with error code
 
 ＜SELinuxが有効な状態で、エラーの解消を行う。＞
 2022/2/10 19:11時点でここまで。
+
+
+・参考サイト(監査ログについて)：
+[【ausearch】SELinuxのログの見方とトラブルシュート, 監査設定, tail リアルタイム表示～ \| SEの道標](https://milestone-of-se.nesuke.com/sv-basic/linux-basic/audit-log-ausearch/)
+
+
+＜setroubleshootがインストールされているか確認。＞
+
+[admin@localhost log]$ yum list setroubleshoot-server
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+インストール済みパッケージ
+setroubleshoot-server.x86_64
+
+→インストールされていることを確認。
+
+
+＜setroubleshootにより生成されたメッセージを確認。＞
+[admin@localhost log]$ sudo tail -f messages
+
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+Feb 12 15:09:40 localhost setroubleshoot: SELinux is preventing /usr/sbin/mysqld from create access on the sock_file mysql.sock. For complete SELinux mes                            ages run: sealert -l c382c3b3-8d41-430f-ac36-318631153cee
+
+
+＜sealertコマンドでトラブルシュート手順を確認。＞
+
+[admin@localhost log]$ sealert -l c382c3b3-8d41-430f-ac36-318631153cee
+SELinux により、/usr/sbin/mysqld による create アクセスが、sock_file mysql.sock で拒否されました。
+
+*****  プラグイン catchall (100. 信頼性) による示唆****************************************
+
+mysqld に、 mysql.sock sock_file の create アクセスがデフォルトで許可されるべきと考える場合。
+このようにします: バグとして報告してください。
+ローカルのポリシーモジュールを生成すると、
+ このアクセスを許可することができます。
+そして、以下を実行します:
+以下のコマンドを実行して、このアクセスを許可します:
+# ausearch -c 'mysqld' --raw | audit2allow -M my-mysqld
+# semodule -i my-mysqld.pp
+
+
+追加情報:
+ソースコンテキスト                     system_u:system_r:mysqld_t:s0
+ターゲットコンテキスト                   system_u:object_r:tmp_t:s0
+ターゲットオブジェクト                   mysql.sock [ sock_file ]
+ソース                           mysqld
+ソースパス                         /usr/sbin/mysqld
+ポート                           <Unknown>
+ホスト                           localhost.localdomain
+ソース RPM パッケージ                 mysql-community-server-8.0.27-1.el7.x86_64
+ターゲット RPM パッケージ
+ポリシー RPM                      selinux-policy-3.13.1-268.el7.noarch
+Selinux 有効化                   True
+ポリシータイプ                       targeted
+強制モード                         Enforcing
+ホスト名                          localhost.localdomain
+プラットフォーム                      Linux localhost.localdomain 3.10.0-1160.el7.x86_64
+                              #1 SMP Mon Oct 19 16:18:59 UTC 2020 x86_64 x86_64
+通知カウント                        8
+最初の画面                         2022-02-10 18:11:01 JST
+最後の画面                         2022-02-12 15:09:37 JST
+ローカル ID                       c382c3b3-8d41-430f-ac36-318631153cee
+
+生の監査メッセージ
+type=AVC msg=audit(1644646177.75:293): avc:  denied  { create } for  pid=2782 comm="mysqld" name="mysql.sock" scontext=system_u:system_r:mysqld_t:s0 tcontext=system_u:object_r:tmp_t:s0 tclass=sock_file permissive=0
+
+
+type=SYSCALL msg=audit(1644646177.75:293): arch=x86_64 syscall=bind success=no exit=EACCES a0=25 a1=7ffd292cf630 a2=6e a3=7ffd292cf5dc items=0 ppid=1 pid=2782 auid=4294967295 uid=27 gid=27 euid=27 suid=27 fsuid=27 egid=27 sgid=27 fsgid=27 tty=(none) ses=4294967295 comm=mysqld exe=/usr/sbin/mysqld subj=system_u:system_r:mysqld_t:s0 key=(null)
+
+Hash: mysqld,mysqld_t,tmp_t,sock_file,create
+
+＜示された手順でトラブルシュートを実施＞
+
+[root@localhost log]# ausearch -c 'mysqld' --raw | audit2allow -M my-mysqld
+******************** IMPORTANT ***********************
+To make this policy package active, execute:
+
+semodule -i my-mysqld.pp
+
+[root@localhost log]# semodule -i my-mysqld.pp
+[root@localhost log]# exit
+exit
+
+＜Mysqlが立ち上がるか確認＞
+
+[admin@localhost log]$ sudo systemctl restart mysqld
+[admin@localhost log]$ sudo systemctl status mysqld
+● mysqld.service - MySQL Server
+   Loaded: loaded (/usr/lib/systemd/system/mysqld.service; enabled; vendor preset: disabled)
+   
+→正常に稼働することを確認。
