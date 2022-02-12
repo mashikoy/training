@@ -461,7 +461,12 @@ To make this policy package active, execute:
 
 semodule -i my-mysqld.pp
 
+→拒否操作ログから「mysqld」で検索を行い、audit2allowコマンドに渡してポリシーを作成する。
+
 [root@localhost log]# semodule -i my-mysqld.pp
+
+→作成されたポリシーの有効化を行う。
+
 [root@localhost log]# exit
 exit
 
