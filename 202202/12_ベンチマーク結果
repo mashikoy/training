@@ -1,0 +1,386 @@
+ [2022/2/12]ベンチマーク結果
+ 
+ ＜Varnish導入前＞
+ 
+ ★テスト1回目(Varnish無)：10クライアントで100リクエスト
+[admin@localhost training.com]$ ab -c 10 -n 100 https://training.com/?p=5
+This is ApacheBench, Version 2.3 <$Revision: 1879490 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking training.com (be patient).....done
+
+
+Server Software:        Apache/2.4.52
+Server Hostname:        training.com
+Server Port:            443
+SSL/TLS Protocol:       TLSv1.2,ECDHE-RSA-AES256-GCM-SHA384,2048,256
+Server Temp Key:        ECDH P-256 256 bits
+TLS Server Name:        training.com
+
+Document Path:          /?p=5
+Document Length:        56544 bytes
+
+Concurrency Level:      10
+Time taken for tests:   56.525 seconds
+Complete requests:      100
+Failed requests:        99
+   (Connect: 0, Receive: 0, Length: 99, Exceptions: 0)
+Total transferred:      4658943 bytes
+HTML transferred:       4610643 bytes
+Requests per second:    1.77 [#/sec] (mean)
+Time per request:       5652.519 [ms] (mean)
+Time per request:       565.252 [ms] (mean, across all concurrent requests)
+Transfer rate:          80.49 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        4   78 238.5     24    1771
+Processing:  1030 5419 562.7   5513    6223
+Waiting:      558 5334 589.7   5438    6082
+Total:       1037 5497 638.1   5542    7523
+
+Percentage of the requests served within a certain time (ms)
+  50%   5542
+  66%   5610
+  75%   5670
+  80%   5693
+  90%   5951
+  95%   6081
+  98%   7441
+  99%   7523
+ 100%   7523 (longest request)
+
+ ☆テスト1回目(varnish有)：10クライアントで100リクエスト
+
+ [admin@localhost training.com]$ ab -c 10 -n 100 https://training.com/?p=5
+This is ApacheBench, Version 2.3 <$Revision: 1879490 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking training.com (be patient).....done
+
+
+Server Software:        Apache/2.4.52
+Server Hostname:        training.com
+Server Port:            443
+SSL/TLS Protocol:       TLSv1.2,ECDHE-RSA-AES256-GCM-SHA384,2048,256
+Server Temp Key:        ECDH P-256 256 bits
+TLS Server Name:        training.com
+
+Document Path:          /?p=5
+Document Length:        56544 bytes
+
+Concurrency Level:      10
+Time taken for tests:   8.107 seconds
+Complete requests:      100
+Failed requests:        0
+Total transferred:      5712504 bytes
+HTML transferred:       5654400 bytes
+Requests per second:    12.34 [#/sec] (mean)
+Time per request:       810.658 [ms] (mean)
+Time per request:       81.066 [ms] (mean, across all concurrent requests)
+Transfer rate:          688.16 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        7  668 726.0    243    2997
+Processing:     3   86  80.6     82     693
+Waiting:        0   70  70.1     73     558
+Total:        134  753 708.0    337    3060
+
+Percentage of the requests served within a certain time (ms)
+  50%    337
+  66%    973
+  75%   1071
+  80%   1117
+  90%   2070
+  95%   2196
+  98%   2955
+  99%   3060
+ 100%   3060 (longest request)
+ 
+ 
+ 
+ ★テスト2回目(Varnish無)：100クライアントで100リクエスト
+[admin@localhost training.com]$ ab -c 100 -n 100 https://training.com/?p=5
+This is ApacheBench, Version 2.3 <$Revision: 1879490 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking training.com (be patient).....done
+
+
+Server Software:        Apache/2.4.52
+Server Hostname:        training.com
+Server Port:            443
+SSL/TLS Protocol:       TLSv1.2,ECDHE-RSA-AES256-GCM-SHA384,2048,256
+Server Temp Key:        ECDH P-256 256 bits
+TLS Server Name:        training.com
+
+Document Path:          /?p=5
+Document Length:        56544 bytes
+
+Concurrency Level:      100
+Time taken for tests:   62.904 seconds
+Complete requests:      100
+Failed requests:        90
+   (Connect: 0, Receive: 0, Length: 90, Exceptions: 0)
+Total transferred:      4658711 bytes
+HTML transferred:       4610411 bytes
+Requests per second:    1.59 [#/sec] (mean)
+Time per request:       62904.323 [ms] (mean)
+Time per request:       629.043 [ms] (mean, across all concurrent requests)
+Transfer rate:          72.32 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0 7683 5400.1   6882   19032
+
+ ☆テスト2回目(Varnish有)：100クライアントで100リクエスト
+ [admin@localhost training.com]$ ab -c 100 -n 100 https://training.com/?p=5
+This is ApacheBench, Version 2.3 <$Revision: 1879490 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking training.com (be patient).....done
+
+
+Server Software:        Apache/2.4.52
+Server Hostname:        training.com
+Server Port:            443
+SSL/TLS Protocol:       TLSv1.2,ECDHE-RSA-AES256-GCM-SHA384,2048,256
+Server Temp Key:        ECDH P-256 256 bits
+TLS Server Name:        training.com
+
+Document Path:          /?p=5
+Document Length:        56544 bytes
+
+Concurrency Level:      100
+Time taken for tests:   2.057 seconds
+Complete requests:      100
+Failed requests:        0
+Total transferred:      5712347 bytes
+HTML transferred:       5654400 bytes
+Requests per second:    48.62 [#/sec] (mean)
+Time per request:       2056.556 [ms] (mean)
+Time per request:       20.566 [ms] (mean, across all concurrent requests)
+Transfer rate:          2712.53 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:       10  599 287.5    603    1116
+Processing:     2   26 100.9     13    1018
+Waiting:        1   21  87.1     11     881
+Total:        137  625 287.6    611    1142
+ 
+ 
+ 
+ ★テスト3回目(Varnish無)：100クライアントで1000リクエスト
+[admin@localhost training.com]$ ab -c 100 -n 500 https://training.com/?p=5
+This is ApacheBench, Version 2.3 <$Revision: 1879490 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking training.com (be patient)
+Completed 100 requests
+Completed 200 requests
+Completed 300 requests
+Completed 400 requests
+Completed 500 requests
+Finished 500 requests
+
+
+Server Software:        Apache/2.4.52
+Server Hostname:        training.com
+Server Port:            443
+SSL/TLS Protocol:       TLSv1.2,ECDHE-RSA-AES256-GCM-SHA384,2048,256
+Server Temp Key:        ECDH P-256 256 bits
+TLS Server Name:        training.com
+
+Document Path:          /?p=e5
+Document Length:        56369 bytes
+
+Concurrency Level:      100
+Time taken for tests:   394.331 seconds
+Complete requests:      500
+Failed requests:        373
+   (Connect: 0, Receive: 0, Length: 373, Exceptions: 0)
+Total transferred:      24391961 bytes
+HTML transferred:       24251961 bytes
+Requests per second:    1.27 [#/sec] (mean)
+Time per request:       78866.130 [ms] (mean)
+Time per request:       788.661 [ms] (mean, across all concurrent requests)
+Transfer rate:          60.41 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        4 2945 3133.2   2006   14759
+Processing:  2134 72854 24420.6  66653  144267
+Waiting:     1098 66943 19347.9  63383  136758
+Total:       2141 75799 24559.3  71715  145754
+
+Percentage of the requests served within a certain time (ms)
+  50%  71715
+  66%  77857
+  75%  82912
+  80%  87024
+  90%  118094
+  95%  131284
+  98%  137832
+  99%  141038
+ 100%  145754 (longest request)
+ 
+ 
+※リクエスト数を1000にしたら以下エラーが、、、
+Benchmarking training.com (be patient)
+apr_pollset_poll: The timeout specified has expired (70007)
+Total of 1 requests completed
+
+
+
+ ☆テスト3回目(varnish有)：100クライアントで500リクエスト
+[admin@localhost training.com]$ ab -c 100 -n 500 https://training.com/?p=5
+This is ApacheBench, Version 2.3 <$Revision: 1879490 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking training.com (be patient)
+Completed 100 requests
+Completed 200 requests
+Completed 300 requests
+Completed 400 requests
+Completed 500 requests
+Finished 500 requests
+
+
+Server Software:        Apache/2.4.52
+Server Hostname:        training.com
+Server Port:            443
+SSL/TLS Protocol:       TLSv1.2,ECDHE-RSA-AES256-GCM-SHA384,2048,256
+Server Temp Key:        ECDH P-256 256 bits
+TLS Server Name:        training.com
+
+Document Path:          /?p=5
+Document Length:        46001 bytes
+
+Concurrency Level:      100
+Time taken for tests:   6.458 seconds
+Complete requests:      500
+Failed requests:        0
+Total transferred:      23289134 bytes
+HTML transferred:       23000500 bytes
+Requests per second:    77.42 [#/sec] (mean)
+Time per request:       1291.611 [ms] (mean)
+Time per request:       12.916 [ms] (mean, across all concurrent requests)
+Transfer rate:          3521.70 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:       16  862 228.6    926    1231
+Processing:     6  130 190.5     44     861
+Waiting:        1   45  43.9     33     564
+Total:         84  993 346.4    976    2068
+
+Percentage of the requests served within a certain time (ms)
+  50%    976
+  66%   1029
+  75%   1063
+  80%   1221
+  90%   1376
+  95%   1656
+  98%   1791
+  99%   2005
+ 100%   2068 (longest request)
+
+
+
+ ★テスト4回目(varnishのみ)：150クライアントで10000リクエスト
+ ※Varnish導入前ではさばけなかったリクエスト数もさばけるようになっていることを確認
+
+[admin@localhost training.com]$ ab -c 150 -n 10000 https://training.com/?p=5
+This is ApacheBench, Version 2.3 <$Revision: 1879490 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking training.com (be patient)
+Completed 1000 requests
+Completed 2000 requests
+Completed 3000 requests
+Completed 4000 requests
+Completed 5000 requests
+Completed 6000 requests
+Completed 7000 requests
+Completed 8000 requests
+Completed 9000 requests
+Completed 10000 requests
+Finished 10000 requests
+
+
+Server Software:        Apache/2.4.52
+Server Hostname:        training.com
+Server Port:            443
+SSL/TLS Protocol:       TLSv1.2,ECDHE-RSA-AES256-GCM-SHA384,2048,256
+Server Temp Key:        ECDH P-256 256 bits
+TLS Server Name:        training.com
+
+Document Path:          /?p=5
+Document Length:        46001 bytes
+
+Concurrency Level:      150
+Time taken for tests:   146.616 seconds
+Complete requests:      10000
+Failed requests:        7566
+   (Connect: 0, Receive: 0, Length: 7566, Exceptions: 0)
+Total transferred:      545621707 bytes
+HTML transferred:       539778338 bytes
+Requests per second:    68.21 [#/sec] (mean)
+Time per request:       2199.239 [ms] (mean)
+Time per request:       14.662 [ms] (mean, across all concurrent requests)
+Transfer rate:          3634.21 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:       12  971 714.9    906    8308
+Processing:     3 1210 417.4   1200    2699
+Waiting:        2  243 224.0    180    1753
+Total:        381 2181 621.7   2085    9989
+
+Percentage of the requests served within a certain time (ms)
+  50%   2085
+  66%   2193
+  75%   2279
+  80%   2345
+  90%   2573
+  95%   2831
+  98%   3456
+  99%   5691
+ 100%   9989 (longest request)
+ 
+ 
+ 
+ ＜総括：Requests per second比較　※平均値＞
+ 
+テスト1回目：10クライアントで100リクエスト
+ Varnish無：1.77
+ Varnish有：12.34
+
+テスト2回目：10クライアントで100リクエスト
+ Varnish無：1.59
+ Varnish有：48.62
+
+
+テスト3回目：100クライアントで500リクエスト
+ Varnish無：1.27
+ Varnish有：77.42
+ 
+テスト4回目：150クライアントで10000リクエスト
+ Varnish無：さばけない
+ Varnish有：68.21
+ 
+ ＜備考＞
+ Varnish導入前、Failed requestsが出ていた。(Content-lengthのみ)
+ これは動的コンテンツの場合に、生成したページのContent-lengthが異なっているため生じているものである。
+ 実際にaccessとerrorログを確認し、問題なく200コードを返していたため問題ないと思う。
+ 
+ Varnish導入後は消えていたが、これは動的に生成したページをキャッシュしたためである。(多分)
