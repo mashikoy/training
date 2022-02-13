@@ -163,3 +163,113 @@ http://192.168.56.112:8080/info.php
 
 →名前解決できることを確認
 
+
+＜wordpress設定ファイルを用意＞
+
+[admin@localhost training.com]$ sudo cp wp-config-sample.php wp-config.php
+
+
+＜wordpressの設定ファイル修正＞
+
+[admin@localhost wordpress]$ sudo sed -i "s/'database_name_here'/'wordpress'/g" /var/www/training.com/wp-config.php
+
+[admin@localhost wordpress]$ sudo sed -i "s/'username_here'/'wp-usr'/g" /var/www/training.com/wp-config.php
+
+[admin@localhost wordpress]$ sudo sed -i "s/'password_here'/'xxxxxx'/g" /var/www/training.com/wp-config.php
+ 
+[admin@localhost wordpress]$ sudo sed -i "s/'utf8'/'utf8mb4'/g" /var/www/training.com/wp-config.php
+ 
+ 　※データベースの照合順序はMySQLによって自動で割り当てられるためそのまま
+
+→MySQLの設定
+
+   ※認証用ユニークキーは以下サイトで生成されたものをvimでそのまま貼り付け
+   　[](https://api.wordpress.org/secret-key/1.1/salt/)
+
+   ※WordPress データベーステーブルの接頭辞はそのまま
+
+ [カスタム値：vimで追加]
+ define( 'WP_CACHE', true );
+ 
+ ＜インストール実施＞
+ 
+ ～ブラウザにて作業
+ 
+ https://training.com/
+ 
+ →500エラーに、、、
+ 
+ ★原因：Mysqlのsocketファイルの場所が異なるため。
+       ソースビルド時：/tmp/mysql.sock
+       RPM使用時    ：/var/lib/mysql/mysql.sock
+ 
+ ★経緯：今回はyumを使用してインストールを実施したが、
+        その際にビルドしたconfigファイルをコピーしてyumでできたconfigファイルに貼付したため。
+        phpもyumでインストールしたが、phpの設定を確認したら以下のようになっていた。
+        
+        [admin@localhost training.com]$ php -ini | grep sock
+        MYSQL_SOCKET => /var/lib/mysql/mysql.sock
+        
+ ★対応：どちらかを合わせる対応にて行う。
+  　　  yumでの環境構築においては/var/lib/mysql/mysql.sockの使用を想定されているため、
+        その通りにmy.cnfを修正する。
+  
+ ＜インストール再実施＞
+ 
+  https://training.com/
+ →https://training.com/wp-admin/install.php
+ (configを用意しているため、リダイレクトされる。)
+ 
+ サイトのタイトル：training
+ ユーザ名：adm
+ パスワード：UPDiRJq%EfSSX)lQW0
+ メールアドレス：webmaster@training.com
+ 
+ →インストール完了
+ 
+ ＜記事の投稿を実施＞
+ 
+ ～ブラウザにて作業
+ 
+ →記事投稿ができること、および記事にブラウザアクセスできることを確認。
+ 
+ ＜Varnish導入前にabコマンドでテスト＞
+★[2022/2/12]ベンチマーク結果を参照
+
+ ＜Varnish導入＞
+ ～前回導入時とほぼ同じ手順のため割愛(IPなどサーバ固有の情報のみ異なる)
+ 
+ ＜Varnish導入後にabコマンドでテスト＞
+★[2022/2/12]ベンチマーク結果を参照
+
+→Varnish導入後にキャッシュできるようになっていることを確認。
+
+＜Varnish設定：GETリクエストのみ許容するように設定変更＞
+ ～前回導入時と同じ手順のため割愛
+
+
+＜設定内容確認＞
+[admin@localhost ~]$ sudo varnishadm
+
+help
+～～～コマンド一覧出力～～～
+
+vcl.list
+200
+active          0 boot
+
+
+vcl.show boot
+～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～～
+sub vcl_recv {
+    # Happens before we check if we have this in cache already.
+    #
+    # Typically you clean up the request here, removing cookies you don't need,
+    # rewriting the request, etc.
+     if(req.method != "GET") {
+       return (pass);
+     }
+}
+
+→設定されていることを確認
+
