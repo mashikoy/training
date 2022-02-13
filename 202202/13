@@ -1,0 +1,70 @@
+ [2022/2/13]研修タスクまとめ
+ 
+ ◆大枠
+ ・buildした環境とディレクトリ構成やconfigファイルについて比較を行う。
+ 
+ ◆比較結果
+ 
+ ☆総じて言えること
+ 
+ 1.yumの場合、以下のユーザ(とグループ)が自動作成されプロセスの実行ユーザとなっている。
+  1)apache
+  2)mesql
+  3)varnish
+ 
+ 　※ソースビルド時は自分でユーザを作成した。
+ 
+ 2.systemdに自動で登録されており、自動起動設定は
+   sudo systemctl enable ～
+   だけ実行すればよかった。
+   
+   ※ソースビルド時は自分でserviceファイルを用意した。
+   例:)/etc/systemd/system/httpd.service
+ 
+ 
+ ★apache
+ 
+ 1.インストールディレクトリが異なっていた。
+ yum  :/usr/local/apache2/
+ build:/etc/httpd/
+ 
+ 2.コンテンツの配置場所の場所が異なっていた。
+ yum  :/var/www/
+ build:/usr/local/apache2/htdocs/
+ 
+ 3.configファイルについて、以下のようになっていた。
+ yum  :/etc/httpd/conf/httpd.conf → ../conf.d/～.conf(最初からすべてインクルード)
+ build:/usr/local/apache2/conf/httpd.conf → ./extra/～.conf(必要なものを選んでインクルード)
+ 
+ ☆mysql
+ 1.インストールディレクトリが異なっていた。
+ yum  :/usr/bin/
+ build:/usr/local/mysql/
+ 
+ 2.socketファイルの場所が異なっていた。
+ yum  :/var/lib/mysql/mysql.sock(※1)
+ build:/tmp/mysql.sock(※2)
+ 
+ ※1 RPMを使用した際に格納される場所
+ ※2 UNIX ソケットファイルのデフォルトの場所
+ 
+ ★php
+ 1.インストールディレクトリが異なっていた。
+ yum  :/usr/local/php/
+ build:/etc/opt/remi/php80/
+
+ 2.apacheへのmod_phpの組み込み方が異なっていた。
+ yum  :php80_phpをインストール(※3)
+ build:makeファイル作成時(configureコマンド実行時)、オプションを指定
+       (with-apxs2=/usr/local/apache2/bin/apxs)
+ 
+ ※3 ↓公式より抜粋
+the Apache module, php80-php, is available, but of course, only one mod_php can be used (so you have to disable or uninstall any other, the one provided by the default "php" package still have priority)
+[PHP 8.0 as Software Collection - Remi's RPM repository - Blog](https://blog.remirepo.net/post/2020/04/10/PHP-8.0-as-Software-Collection)
+
+ 3.socketファイルの指定が異なっていた。
+ yum  : [admin@localhost training.com]$ php -ini | grep sock
+        MYSQL_SOCKET => /var/lib/mysql/mysql.sock
+        
+ yum  : [admin@localhost training.com]$ php -ini | grep sock
+        (MYSQL_SOCKETの指定はしていないため、UNIXデフォルトの/tmp/mysql.sockを使用している。)
