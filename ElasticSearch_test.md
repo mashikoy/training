@@ -1,5 +1,3 @@
-wip
-
 ### 環境
 wsl2にて作業(コンテナは使用していない。)
 
@@ -1313,7 +1311,7 @@ GET /ldgourmet/_search
 }
 ```
 
-特定の店舗のドキュメントを取得する。(kibana_devtool)
+#### 特定の店舗のドキュメントを取得する。(kibana_devtool)
 ```
 GET _search
 {
@@ -1324,7 +1322,7 @@ GET _search
   }
 }
 ```
-出力結果
+#### 出力結果
 ```
 {
   "took" : 10,
