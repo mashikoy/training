@@ -18,7 +18,7 @@ wrk:~/elasticsearch-8.1.0$ bin/elasticsearch # 起動
 wrk:~$ wget https://artifacts.elastic.co/downloads/kibana/kibana-8.1.0-linux-x86_64.tar.gz
 wrk:~$ tar xzvf kibana-8.1.0-linux-x86_64.tar.gz
 wrk:~$ cd kibana-8.1.0
-wrk:~/kibana-8.1.0$ bin/elasticsearch-plugin install analysis-kuromoji
+wrk:~/kibana-8.1.0$ ./bin/kibana
 ```
 
 ### kuromojiをインストール
