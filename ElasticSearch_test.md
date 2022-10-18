@@ -4,13 +4,29 @@ wip
 wsl2にて作業(コンテナは使用していない。)
 
 ### ElasticSearchをインストール
+```
+wrk:~$ wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-8.1.0-darwin-x86_64.tar.gz
+wrk:~$ tar -xzf elasticsearch-8.1.0-darwin-x86_64.tar.gz
+wrk:~$ cd elasticsearch-8.1.0/
+wrk:~/elasticsearch-8.1.0$ sudo apt install openjdk-17-jdk # elastic-search8.1.0はjavaのバージョンが17以上である必要があった
+wrk:~/elasticsearch-8.1.0$ export ES_JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64/"
+wrk:~/elasticsearch-8.1.0$ bin/elasticsearch # 起動
+```
 
 ### kibanaをインストール
+```
+wrk:~$ wget https://artifacts.elastic.co/downloads/kibana/kibana-8.1.0-linux-x86_64.tar.gz
+wrk:~$ tar xzvf kibana-8.1.0-linux-x86_64.tar.gz
+wrk:~$ cd kibana-8.1.0
+wrk:~/kibana-8.1.0$ bin/elasticsearch-plugin install analysis-kuromoji
+```
 
 ### kuromojiをインストール
+wrk:~/elasticsearch-8.1.0$ bin/elasticsearch-plugin install analysis-kuromoji
 
 ### test1_データ構造を理解する
 #### kibana画面にて、データをPOSTしてみる。
+wip
 
 ### test2_大量データを投入し、検索を行う。
  - 投入データ : ライブドア社が一般公開しているの研究用csvファイルを使用する。
