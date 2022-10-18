@@ -22,7 +22,9 @@ wrk:~/kibana-8.1.0$ bin/elasticsearch-plugin install analysis-kuromoji
 ```
 
 ### kuromojiをインストール
+```
 wrk:~/elasticsearch-8.1.0$ bin/elasticsearch-plugin install analysis-kuromoji
+```
 
 ### test1_データ構造を理解する
 #### kibana画面にて、データをPOSTしてみる。
