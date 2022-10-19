@@ -28,7 +28,7 @@ wrk:~/elasticsearch-8.1.0$ bin/elasticsearch-plugin install analysis-kuromoji
 ```
 
 ### 1_データ構造を理解する
-#### kibana画面にて、データをPOSTしてみる。
+#### kibana画面にて、データをPOSTする。
 #### [参考サイト](https://qiita.com/nskydiving/items/1c2dc4e0b9c98d164329)
 ```
 PUT /library/_doc/1
