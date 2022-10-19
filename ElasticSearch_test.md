@@ -1505,3 +1505,35 @@ GET _search
 }
 
 ```
+他試したクエリ
+```
+# 部分一致_descriptionに"渋谷"が含まれているドキュメント
+GET _search
+{
+  "query": {
+    "match": {
+      "description": "渋谷"
+    }
+  }
+}
+
+# 範囲検索1_station_time1(駅からの距離(分)だと思われる)が10未満 ※時間や人数での範囲検索に使用可能
+GET _search
+{
+  "query": {
+    "range": {
+      "station_time1": {"lt":10}
+    }
+  }
+}
+
+# 範囲検索2_access_countが100000以上 ※時間や人数での範囲検索に使用可能
+GET _search
+{
+  "query": {
+    "range": {
+      "access_count": {"gt":100000}
+    }
+  }
+}
+```
