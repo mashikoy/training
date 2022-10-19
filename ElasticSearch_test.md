@@ -4,7 +4,7 @@ wrk:~$ cat /proc/version
 Linux version 5.10.16.3-microsoft-standard-WSL2 (oe-user@oe-host) (x86_64-msft-linux-gcc (GCC) 9.3.0, GNU ld (GNU Binutils) 2.34.0.20200220) #1 SMP Fri Apr 2 22:23:49 UTC 2021
 ```
 
-### ElasticSearchをインストール
+### ElasticSearchを導入
 ```
 wrk:~$ wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-8.1.0-darwin-x86_64.tar.gz
 wrk:~$ tar -xzf elasticsearch-8.1.0-darwin-x86_64.tar.gz
@@ -14,7 +14,7 @@ wrk:~/elasticsearch-8.1.0$ export ES_JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd
 wrk:~/elasticsearch-8.1.0$ bin/elasticsearch # 起動
 ```
 
-### kibanaをインストール
+### kibanaを導入(≒GUIツール)
 ```
 wrk:~$ wget https://artifacts.elastic.co/downloads/kibana/kibana-8.1.0-linux-x86_64.tar.gz
 wrk:~$ tar xzvf kibana-8.1.0-linux-x86_64.tar.gz
@@ -22,7 +22,7 @@ wrk:~$ cd kibana-8.1.0
 wrk:~/kibana-8.1.0$ ./bin/kibana # 起動
 ```
 
-### kuromojiをインストール
+### kuromojiを導入(日本語検索用)
 ```
 wrk:~/elasticsearch-8.1.0$ bin/elasticsearch-plugin install analysis-kuromoji
 ```
