@@ -1,7 +1,7 @@
 ## 概要
 AWSの以下サービスについて調べる(随時更新)
  - PrivateLink
- - Route Table
+ - RouteTable
  - VPCエンドポイント
  - マネージドプレフィックス
  - エンドポイント
@@ -26,3 +26,6 @@ AWSの以下サービスについて調べる(随時更新)
 
 #### 参考資料
  - AWS公式 https://aws.amazon.com/jp/privatelink/
+
+## RouteTable
+#### どんなサービス?
