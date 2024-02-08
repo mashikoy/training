@@ -60,7 +60,7 @@ AWSの以下サービスについて調べる(随時更新)
 #### どんなサービス?
  - VPCにエンドポイントを作って、そのエンドポイントを経由して他のAWSサービスに接続することができる。参考資料のブログがイメージしやすい。
  - 内部でPrivateLinkを使用するので、インターネットを経由しない。(≒Internetgatewayを設置する必要がない。)そのためコスト的にもセキュリティ的にもよいらしい。
-   - そのため、VPCエンドポイントで接続できるサービスは[PrivateLinkの対応しているサービス](https://docs.aws.amazon.com/ja_jp/vpc/latest/privatelink/aws-services-privatelink-support.html)
+   - VPCエンドポイントで接続できるサービスは[PrivateLinkの対応しているサービス](https://docs.aws.amazon.com/ja_jp/vpc/latest/privatelink/aws-services-privatelink-support.html)
  - S3等のサービスがVPC内にあるかのように使える。
  
 #### どういう時に使う?
